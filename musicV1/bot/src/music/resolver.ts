@@ -1,10 +1,11 @@
 import chalk from "chalk";
-import { Kazagumo, KazagumoSearchResult, KazagumoTrack } from "kazagumo";
+import { Kazagumo, KazagumoPlayer, KazagumoSearchResult, KazagumoTrack } from "kazagumo";
 import { Constants, LavalinkResponse, LoadType, Node, Track } from "shoukaku";
 import { breakerAllow, breakerFailure, breakerSuccess } from "./breaker.js";
 import { cacheDropUri, cacheGet, cachePut, cacheSearchTitles, negativeHas, negativePut, normalizeQuery } from "./cache.js";
 import { musicConfig, SOURCES, sourceEnabled } from "./config.js";
 import { Semaphore, userAllow } from "./limiter.js";
+import Env from "../utils/env.js";
 
 const head = chalk.cyan.bold('[Resolver]');
 const youtubeGate = new Semaphore(() => musicConfig().youtubeConcurrency);
@@ -316,6 +317,19 @@ export async function musicSearch(kazagumo: Kazagumo, query: string, opts: Music
   }
 
   return searchSources(kazagumo, node, queryNorm, musicConfig().order, true, opts.requester, exclude);
+}
+
+const PLAYLIST_MAX = Number(Env('MUSIC_PLAYLIST_MAX')) || 500;
+
+/** Adds a search result to the queue: every track of a playlist/album (up to PLAYLIST_MAX), else the first. Returns a label for the reply. */
+export function queueResult(player: KazagumoPlayer, result: MusicSearchResult): string {
+  if (result.type === 'PLAYLIST' && result.tracks.length > 1) {
+    const list = result.tracks.slice(0, PLAYLIST_MAX) as KazagumoTrack[];
+    player.queue.add(list);
+    return `${result.playlistName || 'Playlist'} (${list.length})`;
+  }
+  player.queue.add(result.tracks[0] as KazagumoTrack);
+  return result.tracks[0].title;
 }
 
 // A track failed during playback. Forget it and look for the same song on another source.

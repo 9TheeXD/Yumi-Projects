@@ -131,7 +131,8 @@ export async function restorePlayers(client: Client, kazagumo: Kazagumo) {
         await player.play();
       }
 
-      if (data.position) player.seek(data.position);
+      // Nothing restored (track gone): seek() would throw and abort the rest of this player's restore.
+      if (data.position && player.queue.current) player.seek(data.position);
       if (data.paused) player.pause(true);
       player.loop = data.loop;
       player[247] = data[247];

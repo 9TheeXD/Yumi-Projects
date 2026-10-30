@@ -35,7 +35,11 @@ if(interaction.guild){
         const source = interaction.options.get('source', false);
         if (!query) return interaction.respond([]);
 
-        const Yresults = (await musicSearch(kazagumo, query, { requester: member, userId: member.id, kind: 'autocomplete' })).tracks;
+        const res = await musicSearch(kazagumo, query, { requester: member, userId: member.id, kind: 'autocomplete' });
+        const Yresults = res.tracks;
+        // Playlist / album link: offer the whole list first (value = the link, queued in full by /play).
+        const listChoice: ApplicationCommandOptionChoiceData[] = res.type === 'PLAYLIST' && query.trim().length <= 100
+          ? [{ name: `📃 ${res.playlistName || 'Playlist'} (${res.tracks.length})`.slice(0, 100), value: query.trim() }] : [];
         // const Sresults = (await kazagumo.search(query, { requester: member })).tracks.filter(t=>t.sourceName == 'spotify');
         // const tracks = [...Yresults.slice(0, 10), ...Sresults.slice(0, 10)];
         const tracks = Yresults.slice(0, 10);
@@ -44,10 +48,10 @@ if(interaction.guild){
           return interaction.respond([]);
         }
 
-        const choices: ApplicationCommandOptionChoiceData[] = tracks.slice(0, 25).map((track,i) => ({
+        const choices: ApplicationCommandOptionChoiceData[] = [...listChoice, ...tracks.slice(0, 24).map((track,i) => ({
           name: `${track.sourceName || 'unknown'}・${track.title.slice(0, 80)} 「${formatTime((track.length || 0) / 1000)}」`.slice(0, 100),
           value: choiceValue(track, i),
-        }));
+        }))];
 
         return interaction.respond(choices);
       }catch(e: any){

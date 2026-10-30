@@ -6,7 +6,7 @@ import { setTimeout as wait } from "timers/promises";
 import Env from "../utils/env.js";
 import { clockToMs } from "global/common-functions";
 import { InteractionElements } from "../utils/interactionElements.js";
-import { musicSearch, noticeText } from "../music/resolver.js";
+import { musicSearch, noticeText, queueResult } from "../music/resolver.js";
 type Locale = 'id' | 'da' | 'de' | 'en-GB' | 'en-US' | 'es-ES' | 'es-419' | 'fr' | 'hr' | 'it' | 'lt' | 'hu' | 'nl' | 'no' | 'pl' | 'pt-BR' | 'ro' | 'fi' | 'sv-SE' | 'vi' | 'tr' | 'cs' | 'el' | 'bg' | 'ru' | 'uk' | 'hi' | 'th' | 'zh-CN' | 'ja' | 'zh-TW' | 'ko';
 
 export class SlashCommands {
@@ -66,7 +66,8 @@ if(interaction.guild){
 
         console.debug({playing: player.playing, paused: player.paused});
 
-        player.queue.add(result.tracks[0] as KazagumoTrack);
+        // Playlist / album link: queue every track (capped), otherwise the best match only.
+        const added = queueResult(player, result);
         if(!player.paused)player.play();
         const text = `Loading Now Playing...`;  /// lang
         if(!interaction.channel || !interaction.channel.isSendable())return;
@@ -79,7 +80,7 @@ if(interaction.guild){
           : await interaction.channel.send({ components: [new TextDisplayBuilder().setContent(text)], flags: MessageFlags.IsComponentsV2 });
         // const m = await interaction.reply({ components: [new TextDisplayBuilder().setContent(text)], flags: MessageFlags.IsComponentsV2 });
         player.messageId = m?.id;
-        interaction.editReply({ content: [notice, iE.song_added_message[interaction.locale](result.tracks[0].title, m.url)].filter(Boolean).join('\n') });
+        interaction.editReply({ content: [notice, iE.song_added_message[interaction.locale](added, m.url)].filter(Boolean).join('\n') });
 
         await wait(300);
         await sendPStatus(client, kazagumo, player);
