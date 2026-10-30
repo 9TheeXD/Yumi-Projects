@@ -21,6 +21,10 @@ export const SOURCES: Record<string, SourceDef> = {
   // NodeLink only. Free full-length streams (mp3), good for Western/K-pop, weak for mixed Thai queries.
   audiomack:     { id: 'audiomack',     prefix: 'admsearch:', key: 'audiomack',  strict: true, manager: 'audiomack' },
   jiosaavn:      { id: 'jiosaavn',      prefix: 'jssearch:',  key: 'jiosaavn',   strict: true, manager: 'jiosaavn' },
+  // Metadata catalogs (good Thai + international matching). The node plays them from YouTube by ISRC/title,
+  // and NodeLink falls back to SoundCloud etc. when YouTube fails.
+  spotify:       { id: 'spotify',       prefix: 'spsearch:',  key: 'spotify',    strict: true, manager: 'spotify' },
+  applemusic:    { id: 'applemusic',    prefix: 'amsearch:',  key: 'applemusic', strict: true, manager: 'applemusic' },
   youtube_music: { id: 'youtube_music', prefix: 'ytmsearch:', key: 'youtube',    strict: false, manager: 'youtube' },
   youtube:       { id: 'youtube',       prefix: 'ytsearch:',  key: 'youtube',    strict: false, manager: 'youtube' },
 };
@@ -48,9 +52,9 @@ const num = (v: string | undefined, def: number) => {
 function fromEnv(): MusicConfig {
   return {
     // YouTube is last on purpose. See handoff-music-bot.md section 3.
-    order: list(Env('MUSIC_SOURCE_ORDER'), ['soundcloud', 'audiomack', 'youtube_music', 'youtube']),
+    order: list(Env('MUSIC_SOURCE_ORDER'), ['soundcloud', 'audiomack', 'spotify', 'applemusic', 'deezer', 'youtube_music', 'youtube']),
     disabled: list(Env('MUSIC_SOURCE_DISABLED'), []),
-    autocompleteOrder: list(Env('MUSIC_AUTOCOMPLETE_ORDER'), ['soundcloud', 'youtube_music']),
+    autocompleteOrder: list(Env('MUSIC_AUTOCOMPLETE_ORDER'), ['soundcloud', 'spotify', 'applemusic', 'youtube_music']),
     negativeTtlMs: num(Env('MUSIC_NEGATIVE_TTL_MS'), 30 * 60_000),
     breaker: {
       failures: num(Env('MUSIC_BREAKER_FAILURES'), 5),

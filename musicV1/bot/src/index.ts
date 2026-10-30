@@ -89,6 +89,7 @@ declare module 'discord.js' {
     showInfo: boolean;
     247: boolean;
     recovering?: boolean;
+    restoring?: boolean;
   }
   interface KazagumoEvents {
     debug: [message: string];

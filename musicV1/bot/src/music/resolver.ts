@@ -145,9 +145,13 @@ async function nodeManagers(node: Node): Promise<Set<string> | null> {
 // An encoded track only decodes on a node that has its source manager. NodeLink tracks such as
 // "ytmusic", "audiomack" or SoundCloud fail on Lavalink ("Failed to decode track"), so before a
 // track moves to another node (failover, restore) turn it into a track of that node.
+const CATALOG_SOURCES = new Set(['spotify', 'applemusic', 'deezer']);
+
 export async function portTrack(kazagumo: Kazagumo, raw: Track, node: Node): Promise<Track | null> {
   const managers = await nodeManagers(node);
-  if (!managers || managers.has(raw.info.sourceName)) return raw;
+  // Catalog tracks (Spotify/Apple/Deezer) carry plugin-specific fields, so a NodeLink track may not decode
+  // on Lavalink's LavaSrc and the other way round: always reload them from their link on the target node.
+  if (!managers || (managers.has(raw.info.sourceName) && !CATALOG_SOURCES.has(raw.info.sourceName))) return raw;
   const id = raw.info.identifier;
   if ((raw.info.sourceName === 'ytmusic' || raw.info.sourceName.startsWith('youtube')) && id) {
     const t = await loadYoutubeById(node, `https://www.youtube.com/watch?v=${id}`);

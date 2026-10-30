@@ -59,6 +59,28 @@ lavalink:
     #  retryLimit: -1
 
 plugins:
+  # LavaSrc: Spotify / Apple Music / Deezer. Spotify and Apple Music only give metadata;
+  # audio comes from YouTube via the providers below (ISRC first, then title search).
+  # Keys come from env (docker-compose.yml): SPOTIFY_*, DEEZER_*.
+  lavasrc:
+    providers:
+      - "ytsearch:\"%ISRC%\""
+      - "ytsearch:%QUERY%"
+    sources:
+      spotify: false
+      applemusic: true
+      deezer: false
+    spotify:
+      countryCode: "TH"
+      playlistLoadLimit: 3
+      albumLoadLimit: 3
+      resolveArtistsInSearch: false
+    applemusic:
+      countryCode: "TH"
+      playlistLoadLimit: 2
+      albumLoadLimit: 2
+    deezer:
+      formats: ["MP3_128", "MP3_64"]
   youtube:
     enabled: true
     allowSearch: true

@@ -49,6 +49,12 @@ services:
       # only while YouTube blocks hard, it bills by traffic.
       NODELINK_SOURCES_YOUTUBE_PROXIES: ${YT_PROXIES:-[]}
 
+      # Spotify: without a client id/secret NodeLink fetches tokens from a third-party server
+      # (externalAuthUrl). Set SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET (developer.spotify.com) to use our own.
+      NODELINK_SOURCES_SPOTIFY_CLIENTID: ${SPOTIFY_CLIENT_ID:-}
+      NODELINK_SOURCES_SPOTIFY_CLIENTSECRET: ${SPOTIFY_CLIENT_SECRET:-}
+      NODELINK_SOURCES_SPOTIFY_MARKET: ${SPOTIFY_MARKET:-TH}
+
       # Search: the bot always sends an explicit prefix, these are only for direct API users.
       NODELINK_SEARCH_DEFAULTSOURCE: '["soundcloud","youtube"]'
 

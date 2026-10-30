@@ -85,6 +85,7 @@ export async function restorePlayers(client: Client, kazagumo: Kazagumo) {
         voiceId: data.voiceId,
         textId: data.textId
       });
+      player.restoring = true;
 
       const guild = client.guilds.cache.get(data.guildId);
       const channel = await guild?.channels.fetch(data.textId);
@@ -141,6 +142,9 @@ export async function restorePlayers(client: Client, kazagumo: Kazagumo) {
 
     } catch (e) {
       console.error("Restore player error:", e);
+    } finally {
+      const p = kazagumo.players.get(data.guildId);
+      if (p) p.restoring = false;
     }
   }
 

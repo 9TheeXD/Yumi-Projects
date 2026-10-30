@@ -196,7 +196,8 @@ export default class KazagumoManager {
       console.debug({playing: player.playing, paused: player.paused});
 
       player.latestUpdate = Date.now();
-      if(!player.queue.current && player.queue.size == 0 && player[247] == false){
+      // A restored player gets updates before its queue is refilled: do not drop it then.
+      if(!player.queue.current && player.queue.size == 0 && player[247] == false && !player.restoring){
         try{player.disconnect();}
         catch{(e: any)=>{console.log('')}};
       };
