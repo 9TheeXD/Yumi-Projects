@@ -204,7 +204,9 @@ const editQueue = new Map<string, { running: Promise<void>; again: boolean }>();
 
 export function sendPStatus(client: Client, kazagumo: Kazagumo, player: Player, data?: { locale?: Locale, from?: string }): Promise<void> {
   const q = editQueue.get(player.guildId);
-  if (q) { q.again = true; return q.running; }
+  // Busy: the running loop picks this up. Do not hand back the loop's promise: with updates every
+  // 2s it can keep looping, and callers that await it (then save players) would never continue.
+  if (q) { q.again = true; return Promise.resolve(); }
   const entry = { running: Promise.resolve(), again: false };
   entry.running = (async () => {
     try {

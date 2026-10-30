@@ -202,8 +202,8 @@ export default class KazagumoManager {
         catch{(e: any)=>{console.log('')}};
       };
 
-      await sendPStatus(client, kazagumo, player, { from: 'playerUpdate event' });
       savePlayers(kazagumo);
+      await sendPStatus(client, kazagumo, player, { from: 'playerUpdate event' });
  });kazagumo.on('playerMoved', async(p, state, channels)=>{
       console.log(headK, `Player was moved: ${chalk.bold(p.guildId)}`);
       if(state === 'LEFT' && channels.oldChannelId){
