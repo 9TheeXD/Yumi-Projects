@@ -52,9 +52,9 @@ const num = (v: string | undefined, def: number) => {
 function fromEnv(): MusicConfig {
   return {
     // YouTube is last on purpose. See handoff-music-bot.md section 3.
-    order: list(Env('MUSIC_SOURCE_ORDER'), ['soundcloud', 'audiomack', 'spotify', 'applemusic', 'deezer', 'youtube_music', 'youtube']),
+    order: list(Env('MUSIC_SOURCE_ORDER'), ['spotify', 'soundcloud', 'audiomack', 'applemusic', 'deezer', 'youtube_music', 'youtube']),
     disabled: list(Env('MUSIC_SOURCE_DISABLED'), []),
-    autocompleteOrder: list(Env('MUSIC_AUTOCOMPLETE_ORDER'), ['soundcloud', 'spotify', 'applemusic', 'youtube_music']),
+    autocompleteOrder: list(Env('MUSIC_AUTOCOMPLETE_ORDER'), ['spotify', 'soundcloud', 'applemusic', 'youtube_music']),
     negativeTtlMs: num(Env('MUSIC_NEGATIVE_TTL_MS'), 30 * 60_000),
     breaker: {
       failures: num(Env('MUSIC_BREAKER_FAILURES'), 5),

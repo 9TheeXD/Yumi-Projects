@@ -37,6 +37,11 @@ const PROBES = [
   { source: 'soundcloud', id: env('SIDECAR_SC_PROBE', 'scsearch:lofi chill beat'), manager: 'soundcloud' },
   // Plain HTTP file: every node has it, so the update health check has a non-YouTube source on Lavalink too.
   { source: 'http', id: env('SIDECAR_HTTP_PROBE', 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'), manager: 'http' },
+  // Catalog sources (metadata only, audio comes from YouTube): search check only, no stream check,
+  // so they add no YouTube traffic. A node without the source manager (no key yet) reports "off".
+  { source: 'spotify', id: env('SIDECAR_SP_PROBE', 'spsearch:Bodyslam ความเชื่อ'), manager: 'spotify', catalog: true },
+  { source: 'applemusic', id: env('SIDECAR_AM_PROBE', 'amsearch:Bodyslam ความเชื่อ'), manager: 'applemusic', catalog: true },
+  { source: 'deezer', id: env('SIDECAR_DZ_PROBE', 'dzsearch:Bodyslam ความเชื่อ'), manager: 'deezer', catalog: true },
 ];
 // Real playback results written by soak-client.mjs (alternates nodes track by track).
 // Fresher than SOAK_MAX_AGE_MS they win over load-level checks.
@@ -128,7 +133,11 @@ async function probeNode(n) {
   let managers = null;
   try { managers = (await call(n, 'GET', '/v4/info')).json?.sourceManagers ?? null; } catch {}
   for (const p of PROBES) {
-    if (p.manager && managers && !managers.includes(p.manager)) continue; // node does not ship this source
+    // Not on this node: catalog sources wait for a key, so show them as "off"; other sources are simply not shipped.
+    if (p.manager && managers && !managers.includes(p.manager)) {
+      if (p.catalog) out.sources[p.source] = { ok: false, off: true, error: 'not enabled on this node' };
+      continue;
+    }
     try {
       const r = await call(n, 'GET', `/v4/loadtracks?identifier=${encodeURIComponent(p.id)}`);
       const t = r.json?.loadType;
@@ -138,7 +147,7 @@ async function probeNode(n) {
         continue;
       }
       out.sources[p.source] = { ok: true, level: 'load' };
-      if (n.kind === 'nodelink') {
+      if (n.kind === 'nodelink' && !p.catalog) {
         const s = await streamCheck(n, data.encoded);
         if (s) out.sources[p.source] = { ...s, level: 'stream' };
       }
@@ -183,7 +192,7 @@ const LEVELS = {
   error: { emoji: '🔴', color: 0xed4245 },
   info: { emoji: '🔵', color: 0x5865f2 },
 };
-const SOURCE_TH = { youtube: 'YouTube', soundcloud: 'SoundCloud', http: 'ไฟล์เสียงทั่วไป (http)' };
+const SOURCE_TH = { youtube: 'YouTube', soundcloud: 'SoundCloud', http: 'ไฟล์เสียงทั่วไป (http)', spotify: 'Spotify', applemusic: 'Apple Music', deezer: 'Deezer' };
 const sourceTh = s => SOURCE_TH[s] || s;
 
 // Raw node errors -> one Thai sentence. The raw text still goes in a small line for debugging.
@@ -392,6 +401,8 @@ async function round() {
     }
     for (const [src, s] of Object.entries(r.sources)) {
       const wasOk = was?.sources?.[src]?.ok;
+      // "off" (no key yet) is not a failure: no alert when a source is off or turns off.
+      if (s.off || (was?.sources?.[src]?.off && !s.ok)) continue;
       if (wasOk !== undefined && wasOk !== s.ok) {
         if (s.ok) await notify('ok', `${sourceTh(src)} บน ${r.name} ใช้ได้อีกครั้ง`);
         else alerted.add(`${src === 'youtube' ? 'yt' : src}:${r.name}`), await notify('warn', `${sourceTh(src)} บน ${r.name} ใช้ไม่ได้`, [explain(s.error), rawLine(s.error)], src === 'youtube' ? { loginNodes: [r.name] } : {});
@@ -678,7 +689,7 @@ async function buildSnapshot() {
       players: stats?.players ?? null, playingPlayers: stats?.playingPlayers ?? null,
       nodeUptimeMs: stats?.uptime ?? null,
       cpu: u?.cpu ?? null, mem: u ? { used: u.memUsed, total: u.memTotal, percent: u.memPercent } : null,
-      sources: Object.fromEntries(Object.entries(r.sources || {}).map(([k, v]) => [k, { ok: !!v.ok, level: v.level ?? null, error: v.error ?? null, errorTh: v.ok ? null : (explain(v.error) || null) }])),
+      sources: Object.fromEntries(Object.entries(r.sources || {}).map(([k, v]) => [k, { ok: !!v.ok, off: !!v.off, level: v.level ?? null, error: v.error ?? null, errorTh: v.ok || v.off ? null : (explain(v.error) || null) }])),
       burner: burnerSet(n),
       history24: { uptime: h.uptime, youtube: h.youtube },
       lastDown: h.lastDown,
