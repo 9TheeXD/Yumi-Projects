@@ -16,11 +16,17 @@ const iE = new InteractionElements;
 
 function shortSourceName(source?: string) {
   const map: Record<string, string> = {
-    youtube: "yt",
-    soundcloud: "sc",
+    youtube: "YouTube", ytmusic: "YT Music", soundcloud: "SoundCloud", spotify: "Spotify",
+    applemusic: "Apple Music", deezer: "Deezer", audiomack: "Audiomack",
   };
 
-  return source ? map[source] ?? source : source;
+  return source ? map[source] ?? source : 'unknown';
+};
+const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
+// "Source・Title - Artist 「3:21」", title and artist cut so the whole line fits (Discord max 100).
+const choiceName = (track: { sourceName?: string; title: string; author?: string; length?: number }) => {
+  const author = track.author?.replace(/ - Topic$/, '').trim();
+  return `${shortSourceName(track.sourceName)}・${cut(track.title, 40)}${author ? ` - ${cut(author, 24)}` : ''} 「${formatTime((track.length || 0) / 1000)}」`.slice(0, 100);
 };
 
 if(interaction.guild){
@@ -49,7 +55,7 @@ if(interaction.guild){
         }
 
         const choices: ApplicationCommandOptionChoiceData[] = [...listChoice, ...tracks.slice(0, 24).map((track,i) => ({
-          name: `${track.sourceName || 'unknown'}・${track.title.slice(0, 80)} 「${formatTime((track.length || 0) / 1000)}」`.slice(0, 100),
+          name: choiceName(track),
           value: choiceValue(track, i),
         }))];
 
@@ -78,7 +84,7 @@ if(interaction.guild){
             }
 
             const choices: ApplicationCommandOptionChoiceData[] = tracks.slice(0, 25).map((track,i) => ({
-              name: `${track.sourceName || 'unknown'}・${track.title.slice(0, 80)} 「${formatTime((track.length || 0) / 1000)}」`.slice(0, 100),
+              name: choiceName(track),
               value: choiceValue(track, i),
             }));
 

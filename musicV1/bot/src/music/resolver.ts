@@ -3,7 +3,7 @@ import { Kazagumo, KazagumoPlayer, KazagumoSearchResult, KazagumoTrack } from "k
 import { Constants, LavalinkResponse, LoadType, Node, Track } from "shoukaku";
 import { breakerAllow, breakerFailure, breakerSuccess } from "./breaker.js";
 import { cacheDropUri, cacheGet, cachePut, cacheSearchTitles, negativeHas, negativePut, normalizeQuery } from "./cache.js";
-import { musicConfig, SOURCES, sourceEnabled } from "./config.js";
+import { musicConfig, SOURCES, sourceEnabled, type SourceDef } from "./config.js";
 import { Semaphore, userAllow } from "./limiter.js";
 import Env from "../utils/env.js";
 
@@ -233,23 +233,43 @@ async function autocomplete(kazagumo: Kazagumo, node: Node, query: string, opts:
   if (/^https?:\/\//i.test(query.trim())) return musicSearch(kazagumo, query, { ...opts, kind: 'play' });
   const queryNorm = normalizeQuery(query);
   if (queryNorm.length < 2) return empty();
-  const local = cacheSearchTitles(queryNorm, 5).flatMap(r => r.raw_json ? [JSON.parse(r.raw_json) as Track] : []);
+  const local = cacheSearchTitles(queryNorm, 3).flatMap(r => r.raw_json ? [JSON.parse(r.raw_json) as Track] : []);
   const memo = autocompleteMemo.get(queryNorm);
   let remote: Track[] = memo && Date.now() - memo.at < 10 * 60_000 ? memo.tracks : [];
   if (!memo && userAllow(opts.userId, 'autocomplete')) {
-    const res = await searchSources(kazagumo, node, queryNorm, musicConfig().autocompleteOrder, false, opts.requester, opts.exclude || []);
-    remote = res.tracks.map(t => t.getRaw()._raw as Track);
+    remote = await mixedSources(node, queryNorm, musicConfig().autocompleteOrder, opts.exclude || []);
     autocompleteMemo.set(queryNorm, { at: Date.now(), tracks: remote });
     if (autocompleteMemo.size > 2000) autocompleteMemo.delete(autocompleteMemo.keys().next().value!);
   }
   const seen = new Set<string>();
   const all = [...local, ...remote].filter(t => {
-    const k = t.info.uri || t.info.identifier;
-    if (seen.has(k)) return false;
-    seen.add(k);
+    // Same song from two catalogs (Spotify and Apple Music) shows once.
+    const keys = [t.info.uri || t.info.identifier, normalizeQuery(`${t.info.title} ${t.info.author}`)];
+    if (keys.some(k => seen.has(k))) return false;
+    keys.forEach(k => seen.add(k));
     return true;
   });
   return { type: 'SEARCH', tracks: wrap(kazagumo, all.slice(0, 10), opts.requester) };
+}
+
+// Autocomplete: a few results from each source at once instead of only the first source that matches.
+// YouTube sources (shared with playback and the burner accounts) are asked only when the others found little.
+async function mixedSources(node: Node, queryNorm: string, order: string[], exclude: string[]): Promise<Track[]> {
+  const per = musicConfig().autocompletePerSource;
+  const usable = order.map(id => SOURCES[id]).filter((def): def is SourceDef => !!def && sourceEnabled(def.id)
+    && !exclude.includes(def.key) && nodeSupports(node, def.manager) && !negativeHas(queryNorm, def.id) && breakerAllow(def.key));
+  const ask = async (def: SourceDef) => {
+    const r = await load(node, `${def.prefix}${queryNorm}`, def.key);
+    report(def.key, r);
+    if (!r.ok) { console.warn(head, `${chalk.bold(def.id)} failed for "${queryNorm}":`, r.error); return []; }
+    const found = tracksOf(r.res).tracks.filter(t => acceptable(t, false, queryNorm)).slice(0, per);
+    if (!found.length) negativePut(queryNorm, def.id, musicConfig().negativeTtlMs);
+    return found;
+  };
+  const first = (await Promise.all(usable.filter(d => d.key !== 'youtube').map(ask))).flat();
+  if (first.length >= 3) return first;
+  const yt = usable.find(d => d.key === 'youtube');
+  return yt ? [...first, ...(await ask(yt))] : first;
 }
 
 // Discord autocomplete values are limited to 100 characters, and some track URLs are longer

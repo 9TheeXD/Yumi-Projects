@@ -33,6 +33,7 @@ export type MusicConfig = {
   order: string[];
   disabled: string[];
   autocompleteOrder: string[];
+  autocompletePerSource: number;
   negativeTtlMs: number;
   breaker: { failures: number; windowMs: number; cooldownMs: number; maxCooldownMs: number };
   youtubeConcurrency: number;
@@ -55,6 +56,7 @@ function fromEnv(): MusicConfig {
     order: list(Env('MUSIC_SOURCE_ORDER'), ['spotify', 'soundcloud', 'audiomack', 'applemusic', 'deezer', 'youtube_music', 'youtube']),
     disabled: list(Env('MUSIC_SOURCE_DISABLED'), []),
     autocompleteOrder: list(Env('MUSIC_AUTOCOMPLETE_ORDER'), ['spotify', 'soundcloud', 'applemusic', 'youtube_music']),
+    autocompletePerSource: num(Env('MUSIC_AUTOCOMPLETE_PER_SOURCE'), 4),
     negativeTtlMs: num(Env('MUSIC_NEGATIVE_TTL_MS'), 30 * 60_000),
     breaker: {
       failures: num(Env('MUSIC_BREAKER_FAILURES'), 5),
