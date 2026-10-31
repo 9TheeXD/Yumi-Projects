@@ -20,6 +20,8 @@ export type MusicSearchOptions = {
   kind?: 'play' | 'autocomplete';
   // Source keys to skip (used when a track from that source just failed).
   exclude?: string[];
+  // Source keys to try before the configured order.
+  prefer?: string[];
 };
 
 // Errors that belong to one video, not to YouTube blocking us. They must not trip the breaker.
@@ -336,7 +338,8 @@ export async function musicSearch(kazagumo: Kazagumo, query: string, opts: Music
     return { ...alt, notice: 'youtube_unavailable' };
   }
 
-  return searchSources(kazagumo, node, queryNorm, musicConfig().order, true, opts.requester, exclude);
+  const order = opts.prefer ? [...opts.prefer, ...musicConfig().order.filter(id => !opts.prefer!.includes(id))] : musicConfig().order;
+  return searchSources(kazagumo, node, queryNorm, order, true, opts.requester, exclude);
 }
 
 const PLAYLIST_MAX = Number(Env('MUSIC_PLAYLIST_MAX')) || 500;
@@ -357,7 +360,10 @@ export async function findAlternative(kazagumo: Kazagumo, track: KazagumoTrack, 
   if (track.uri) cacheDropUri(track.uri);
   const key = sourceKeyOf(track.sourceName);
   const q = `${track.title} ${track.author?.replace(/ - Topic$/, '') ?? ''}`;
-  const res = await musicSearch(kazagumo, q, { requester: track.requester, nodeName, exclude: [key] }).catch(() => null);
+  // Spotify / Apple Music / Deezer carry metadata only: the same official song is on YouTube Music.
+  // SoundCloud first would often pick a cover, a remix or a 30 s preview.
+  const prefer = CATALOG_SOURCES.has(track.sourceName) ? ['youtube_music'] : undefined;
+  const res = await musicSearch(kazagumo, q, { requester: track.requester, nodeName, exclude: [key], prefer }).catch(() => null);
   return res?.tracks[0] ?? null;
 }
 

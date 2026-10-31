@@ -78,6 +78,22 @@ export default class KazagumoManager {
     shoukakuRef = kazagumo.shoukaku as unknown as typeof shoukakuRef;
     kazagumo.nodes = Nodes;
 
+    // Join timeout ("not established in 15 seconds"): Discord sent no voice server for the join.
+    // Shoukaku drops its connection but leaves Discord's voice state as is, so every later join to
+    // the same channel times out too. Leave the channel for real, then try once more.
+    const createPlayer = kazagumo.createPlayer.bind(kazagumo);
+    kazagumo.createPlayer = (async (options: Parameters<typeof createPlayer>[0]) => {
+      try {
+        return await createPlayer(options);
+      } catch (err) {
+        if (!/voice connection is not established/i.test((err as Error)?.message ?? '')) throw err;
+        console.warn(headKE, `Voice join timed out in ${chalk.bold(options.guildId)}, leaving and retrying once`);
+        client.guilds.cache.get(options.guildId)?.shard.send({ op: 4, d: { guild_id: options.guildId, channel_id: null, self_mute: false, self_deaf: false } });
+        await new Promise(r => setTimeout(r, 2_000));
+        return createPlayer(options);
+      }
+    }) as typeof kazagumo.createPlayer;
+
     kazagumo.shoukaku.on('ready', (name) => console.log(headS, `Node ${chalk.bold(name)} is ready!`));
     kazagumo.shoukaku.on('error', (name, error) => console.error(headSE, `Node ${chalk.bold(name)} error:`, error.message));
     kazagumo.shoukaku.on('disconnect', (name, count) => console.error(headSE, `Node ${chalk.bold(name)} disconnected: ${count}`));

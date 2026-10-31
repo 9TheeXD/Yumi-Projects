@@ -58,8 +58,10 @@ services:
       # The bot queues at most MUSIC_PLAYLIST_MAX (500) tracks.
       NODELINK_PLAYBACK_MAXPLAYLISTLENGTH: ${MAX_PLAYLIST_LENGTH:-500}
 
-      # Search: the bot always sends an explicit prefix, these are only for direct API users.
-      NODELINK_SEARCH_DEFAULTSOURCE: '["soundcloud","youtube"]'
+      # Default search. The bot always sends an explicit prefix, but NodeLink also uses this list to
+      # find a playable copy of Spotify / Apple Music / Deezer tracks. YouTube Music first: it has the
+      # official upload. SoundCloud often returns covers, remixes or 30 s Go+ previews.
+      NODELINK_SEARCH_DEFAULTSOURCE: '["ytmsearch","ytsearch","soundcloud"]'
 
       # IPv6 rotation. Needs network_mode: host (see below) and the block routed to this host.
       # Applies to all outbound NodeLink requests, not only YouTube.
