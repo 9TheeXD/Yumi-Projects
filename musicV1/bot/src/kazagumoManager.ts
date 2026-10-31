@@ -137,7 +137,7 @@ export default class KazagumoManager {
       if(!track)return;
       // NodeLink sometimes misses the voice-ready event when a track is sent right after joining
       // ("playerStateChange timed out"). Nothing is wrong with the song: play it again once, same source.
-      if(/playerStateChange timed out|Voice playback state timed out/i.test(error) && !(track as { voiceRetry?: boolean }).voiceRetry){
+      if(/playerStateChange timed out|Voice playback state timed out|UDP secretKey missing/i.test(error) && !(track as { voiceRetry?: boolean }).voiceRetry){
         (track as { voiceRetry?: boolean }).voiceRetry = true;
         console.warn(headKE, `Voice start timeout in ${chalk.bold(p.guildId)}, replaying ${track.title}`);
         p.recovering = true;
