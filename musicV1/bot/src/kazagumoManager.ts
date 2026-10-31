@@ -145,9 +145,27 @@ export default class KazagumoManager {
         finally{ p.recovering = false; };
         return;
       }
+      // Discord voice server trouble (voice server crashed: close 4015, node gave up reconnecting,
+      // no UDP info, DAVE handshake). The song is fine and every other source would fail the same way.
+      // Rejoin the same channel (Discord hands out a new voice server) and play the same song again.
+      const VOICE_ERR = /Voice WS closed|reconnection circuit breaker|missing UDP info|Voice connection timed out|\[DAVE\]/i;
+      if(VOICE_ERR.test(error) && !(track as { voiceRejoin?: boolean }).voiceRejoin && p.voiceId){
+        (track as { voiceRejoin?: boolean }).voiceRejoin = true;
+        console.warn(headKE, `Voice server problem in ${chalk.bold(p.guildId)}, rejoining ${p.voiceId} and replaying ${track.title}`);
+        p.recovering = true;
+        try{
+          const conn = kazagumo.shoukaku.connections.get(p.guildId);
+          kazagumo.KazagumoOptions.send(p.guildId, { op: 4, d: { guild_id: p.guildId, channel_id: p.voiceId, self_mute: conn?.muted ?? false, self_deaf: conn?.deafened ?? false } });
+          await new Promise(r => setTimeout(r, 3000));
+          p.queue.unshift(track);
+          if(!p.playing)await p.play();
+        }catch(err){ console.error(headKE, 'Voice rejoin error:', (err as Error).message); }
+        finally{ p.recovering = false; };
+        return;
+      }
       // Second voice start timeout: the song is still fine, the voice session on this node is not.
       // Move the player to another node and play the same song there (no other version).
-      if(/playerStateChange timed out|Voice playback state timed out/i.test(error) && !(track as { nodeRetry?: boolean }).nodeRetry){
+      if((/playerStateChange timed out|Voice playback state timed out/i.test(error) || VOICE_ERR.test(error)) && !(track as { nodeRetry?: boolean }).nodeRetry){
         (track as { nodeRetry?: boolean }).nodeRetry = true;
         const sp = p.shoukaku;
         const from = sp.node.name;
@@ -167,6 +185,8 @@ export default class KazagumoManager {
           return;
         }
       }
+      // Voice problems are not the song's fault: no source fallback, no source failure recorded.
+      if(VOICE_ERR.test(error)){ console.warn(headKE, `Voice still failing in ${chalk.bold(p.guildId)} after rejoin and node move`); return; }
       recordPlayback(track.sourceName, error);
       // One retry per song, on a different source.
       if((track as { altRetry?: boolean }).altRetry)return;

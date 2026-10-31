@@ -208,18 +208,24 @@ export function sendPStatus(client: Client, kazagumo: Kazagumo, player: Player, 
   // 2s it can keep looping, and callers that await it (then save players) would never continue.
   if (q) { q.again = true; return Promise.resolve(); }
   const entry = { running: Promise.resolve(), again: false };
+  // The caller waits for its own edit only. Later requests that arrived meanwhile are edited in the
+  // background; waiting for those too can last forever while players update every 2 s.
+  let firstDone!: () => void;
+  const first = new Promise<void>(r => { firstDone = r; });
   entry.running = (async () => {
     try {
       do {
         entry.again = false;
         await sendPStatusNow(client, kazagumo, player, data).catch(e => console.error(e));
+        firstDone();
       } while (entry.again);
     } finally {
+      firstDone();
       editQueue.delete(player.guildId);
     }
   })();
   editQueue.set(player.guildId, entry);
-  return entry.running;
+  return first;
 }
 
 async function sendPStatusNow(client: Client, kazagumo: Kazagumo, player: Player, data?: { locale?: Locale, from?: string }) {
