@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type { StatusData } from 'global/types';
 import { formatDataSize } from 'global/common-functions';
-import type { Brief, Range, Report, SeriesPoint } from './history.js';
+import type { Brief, Range, Report, SampleStatus, SeriesPoint } from './history.js';
 import { COLORS, seriesLine, svgChart } from './chart.js';
 import { fmtDateTh, fmtDayTh, fmtDurTh, fmtPct } from './format.js';
 import { ICON, RANGE_LONG, backBtn, brand, esc, lastLine, pageLinks, rangeBar, resourcePanels, segTip, shell, type PageCtx } from './pages.js';
@@ -23,6 +23,8 @@ export type MusicNode = {
 	startedAt: number | null; restarts: number | null; image: string | null;
 	players: number | null; playingPlayers: number | null; nodeUptimeMs: number | null;
 	cpu: number | null; mem: { used: number | null; total: number | null; percent: number } | null;
+	/** bytes/วินาที และ bytes รวมตั้งแต่ container เริ่ม (sidecar รุ่นเก่าไม่มี) */
+	net?: { rxBps: number | null; txBps: number | null; rxTotal: number | null; txTotal: number | null } | null;
 	sources: Record<string, MusicSource>;
 	burner: boolean | null;
 	history24: { uptime: string | null; youtube: string | null };
@@ -92,7 +94,7 @@ export const musicError = () => lastError;
 export const nodeKey = (name: string) => `nodes:${name}`;
 export const KIND_LABEL: Record<MusicNode['kind'], string> = { nodelink: 'NodeLink', lavalink: 'Lavalink' };
 
-export function nodeStatusData(n: MusicNode): StatusData {
+export function nodeStatusData(n: MusicNode): SampleStatus {
 	return {
 		name: nodeKey(n.name),
 		status: n.up ? 1 : 0,
@@ -103,6 +105,7 @@ export function nodeStatusData(n: MusicNode): StatusData {
 		resources: n.cpu !== null && n.mem && n.mem.used !== null && n.mem.total !== null
 			? { cpu: { percent: n.cpu }, memory: { percent: n.mem.percent, used: n.mem.used, total: n.mem.total } }
 			: undefined,
+		net: n.up && n.net ? { in: n.net.rxBps, out: n.net.txBps } : undefined,
 	};
 }
 
@@ -127,6 +130,7 @@ const MUSIC_CSS = `<style>
 .players span{color:var(--muted);font-size:.78rem;font-weight:300}
 .nstats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .nstats>div{padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06)}
+.nstats.net{grid-template-columns:repeat(2,1fr)}
 .nstats .k{color:var(--dim);font-size:.76rem;font-weight:300}.nstats .v{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{display:inline-flex;align-items:center;gap:6px;padding:3px 11px;border-radius:99px;font-size:.8rem;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:var(--muted)}
@@ -152,6 +156,13 @@ const SOURCE_NAME: Record<string, () => string> = { youtube: () => 'YouTube', so
 const srcName = (k: string) => SOURCE_NAME[k]?.() ?? k;
 const memText = (m: MusicNode['mem']) => (m && m.used !== null && m.total !== null
 	? `${formatDataSize('byte', m.used, 'short')} / ${formatDataSize('byte', m.total, 'short')}` : null);
+
+/** bytes/วินาที เป็น kbps / Mbps */
+const rateText = (bps: number | null | undefined) => {
+	if (bps == null) return '–';
+	const b = bps * 8;
+	return b >= 1e6 ? `${(b / 1e6).toFixed(2)} Mbps` : `${Math.round(b / 1e3)} kbps`;
+};
 
 const bars = (r: Report) => r.buckets.map(k => {
 	const cls = k.observed <= 0 ? 'na' : k.down <= 0 ? 'ok' : k.down < 5 * 60_000 ? 'warn' : 'bad';
@@ -186,7 +197,10 @@ export function renderMusicIndex(s: StatusData | undefined, items: NodeItem[], r
 	${n.up ? `<div class="nstats">
 		<div><div class="k">Ping</div><div class="v">${n.pingMs ?? '–'} ms</div></div>
 		<div><div class="k">CPU</div><div class="v">${n.cpu !== null ? `${n.cpu.toFixed(2)}%` : '–'}</div></div>
-		<div><div class="k">RAM</div><div class="v">${n.mem ? `${n.mem.percent.toFixed(1)}%` : '–'}</div></div></div>`
+		<div><div class="k">RAM</div><div class="v">${n.mem ? `${n.mem.percent.toFixed(1)}%` : '–'}</div></div></div>
+	${n.net ? `<div class="nstats net">
+		<div><div class="k">${t('net_in')}</div><div class="v">↓ ${rateText(n.net.rxBps)}</div></div>
+		<div><div class="k">${t('net_out')}</div><div class="v">↑ ${rateText(n.net.txBps)}</div></div></div>` : ''}`
 		: `<div class="nstats" style="grid-template-columns:1fr"><div><div class="k">${t('node_cause')}</div><div class="v">${esc(reasonText(n.errorTh))}</div></div></div>`}
 	<div class="chips">${chips}</div>
 	<div class="bars">${bars(r)}</div>
@@ -220,12 +234,15 @@ export function renderMusicNode(n: MusicNode, r: Report, b: Brief, range: Range,
 
 	const meter = (label: string, value: string, pct: number | null) =>
 		`<div class="tile glass"><div class="k">${label}</div><div class="v">${value}</div>${pct !== null ? `<div class="meter"><i style="width:${Math.min(100, pct)}%"></i></div>` : ''}</div>`;
+	const netTile = (label: string, arrow: string, bps: number | null, total: number | null) =>
+		`<div class="tile glass"><div class="k">${label}</div><div class="v">${arrow} ${rateText(bps)}</div>${total !== null ? `<div class="k" style="margin-top:6px">${t('net_total', { n: formatDataSize('byte', total, 'short') })}</div>` : ''}</div>`;
 	const tile = (label: string, value: string | null) => `<div class="tile glass"><div class="k">${label}</div>${value ? `<div class="v">${value}</div>` : '<div class="v na">N/A</div>'}</div>`;
 	const tiles = n.up ? `
 	${tile(t('node_songs'), n.playingPlayers !== null ? `${n.playingPlayers} <small style="font-size:.9rem;color:var(--muted);font-weight:300">/ ${t('node_players', { n: n.players ?? 0 })}</small>` : null)}
 	${tile('Ping', n.pingMs !== null ? `${n.pingMs} ms` : null)}
 	${n.cpu !== null ? meter(t('tile_cpu'), `${n.cpu.toFixed(2)}%`, n.cpu) : tile(t('tile_cpu'), null)}
-	${n.mem ? meter(t('tile_mem'), esc(memText(n.mem) ?? `${n.mem.percent}%`), n.mem.percent) : tile(t('tile_mem'), null)}`
+	${n.mem ? meter(t('tile_mem'), esc(memText(n.mem) ?? `${n.mem.percent}%`), n.mem.percent) : tile(t('tile_mem'), null)}
+	${n.net ? `${netTile(t('net_in'), '↓', n.net.rxBps, n.net.rxTotal)}${netTile(t('net_out'), '↑', n.net.txBps, n.net.txTotal)}` : ''}`
 		: tile(t('node_down_cause'), esc(reasonText(n.errorTh)));
 
 	const srcRows = Object.entries(n.sources).map(([src, v]) => `<div class="srow">
@@ -284,6 +301,7 @@ ${!n.up ? `<div class="warnbox">${t('node_moved')}</div>` : ''}
 	<div class="axis"><span>${fmtDateTh(r.from)}</span><span>${fmtDateTh(r.from + span / 2)}</span><span>${t('now')}</span></div></section>
 <section class="panel glass"><h2>${t('ping_title')}</h2>${svgChart([seriesLine(series, 'ping', 'Ping', COLORS[2])], ' ms')}</section>
 ${resourcePanels(series)}
+${series.some(p => p.netIn !== null || p.netOut !== null) ? `<section class="panel glass"><h2>${t('net_chart')}</h2>${svgChart([seriesLine(series, 'netIn', t('net_in'), COLORS[2]), seriesLine(series, 'netOut', t('net_out'), COLORS[3])], ' kbps')}</section>` : ''}
 <section class="panel glass"><h2>${t('down_history')}</h2>${incidents}</section>
 ${pageLinks(range)}`;
 

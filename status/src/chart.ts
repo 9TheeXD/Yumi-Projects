@@ -8,7 +8,7 @@ export const COLORS = ['#ff5a5f', '#3ddc97', '#4cc9f0', '#fbbf24', '#b388ff'];
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
 export type Line = { name: string; color: string; points: { ts: number; v: number | null }[] };
-export type SeriesKey = 'cpu' | 'memMb' | 'ping' | 'uptimeH' | 'downPct';
+export type SeriesKey = 'cpu' | 'memMb' | 'ping' | 'uptimeH' | 'downPct' | 'netIn' | 'netOut';
 
 /** แปลงข้อมูลช่วงเวลาเป็นเส้นหนึ่งเส้น */
 export function seriesLine(points: SeriesPoint[], key: SeriesKey, name: string, color: string): Line {

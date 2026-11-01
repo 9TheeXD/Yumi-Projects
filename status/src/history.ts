@@ -89,6 +89,8 @@ export function initHistory(): Promise<void> {
 					mem_percent REAL,
 					PRIMARY KEY (service, ts)
 				);
+				ALTER TABLE samples ADD COLUMN IF NOT EXISTS net_in REAL;
+				ALTER TABLE samples ADD COLUMN IF NOT EXISTS net_out REAL;
 				ALTER TABLE segments ADD COLUMN IF NOT EXISTS cause TEXT;
 				ALTER TABLE segments ADD COLUMN IF NOT EXISTS note TEXT;
 				ALTER TABLE segments ADD COLUMN IF NOT EXISTS note_at BIGINT;
@@ -152,17 +154,20 @@ export const getMaintenance = () => getSetting<Record<string, string>>('maintena
 
 /* ---------- การเขียน (cache สถานะที่เปิดอยู่ในหน่วยความจำ ลดการ query) ---------- */
 const open = new Map<string, { id: string; status: number; touched: number }>();
+/** สถานะที่บันทึก: node เพลงมีความเร็วเครือข่ายเพิ่ม (bytes/วินาที) */
+export type SampleStatus = StatusData & { net?: { in: number | null; out: number | null } };
+
 const lastPing = new Map<string, number>();
 const lastSample = new Map<string, number>();
 let lastPrune = 0;
 let writing: Promise<void> = Promise.resolve();
 
 /** เรียกทุกครั้งที่เช็คสถานะเสร็จ (คิวการเขียนตามลำดับ ไม่ทำให้การเฝ้าดูค้าง) */
-export function recordStatus(list: StatusData[], now = Date.now()): void {
+export function recordStatus(list: SampleStatus[], now = Date.now()): void {
 	writing = writing.then(() => write(list, now)).catch(e => console.error('บันทึกประวัติสถานะไม่สำเร็จ:', e));
 }
 
-async function write(list: StatusData[], now: number) {
+async function write(list: SampleStatus[], now: number) {
 	await initHistory();
 	const client = await pool.connect();
 	try {
@@ -188,8 +193,8 @@ async function write(list: StatusData[], now: number) {
 			if (now - (lastSample.get(s.name) ?? 0) >= SAMPLE_EVERY_MS) {
 				const r = s.resources;
 				await client.query(
-					`INSERT INTO samples(service, ts, status, ping, uptime, version, cpu, mem_used, mem_total, mem_percent)
-					 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (service, ts) DO NOTHING`,
+					`INSERT INTO samples(service, ts, status, ping, uptime, version, cpu, mem_used, mem_total, mem_percent, net_in, net_out)
+					 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (service, ts) DO NOTHING`,
 					[
 						s.name, now, s.status,
 						typeof s.ping === 'number' ? Math.round(s.ping) : null,
@@ -199,6 +204,8 @@ async function write(list: StatusData[], now: number) {
 						r?.memory?.used ?? null,
 						r?.memory?.total ?? null,
 						r?.memory?.percent ?? null,
+						s.net?.in ?? null,
+						s.net?.out ?? null,
 					],
 				);
 				lastSample.set(s.name, now);
@@ -272,6 +279,9 @@ export interface SeriesPoint {
 	uptimeH: number | null;
 	downPct: number | null;
 	status: number | null;
+	/** kbps (เฉพาะ node เพลง) */
+	netIn: number | null;
+	netOut: number | null;
 }
 
 const r1 = (v: number | null | undefined) => (v == null ? null : Math.round(v * 10) / 10);
@@ -300,14 +310,16 @@ export async function getSeries(service: string, range: Range = '24h', now = Dat
 	const from = now - span;
 	const size = Math.max(span / SERIES_POINTS, 1000);
 
-	const rows = (await pool.query<{ k: number; cpu: number | null; mem: number | null; ping: number | null; up: number | null; dn: number | null; st: number | null }>(
+	const rows = (await pool.query<{ k: number; cpu: number | null; mem: number | null; ping: number | null; up: number | null; dn: number | null; st: number | null; ni: number | null; no: number | null }>(
 		`SELECT FLOOR((ts - $2::bigint)::float8 / $3::float8)::int AS k,
 		        AVG(cpu)::float8 AS cpu,
 		        AVG(mem_used)::float8 AS mem,
 		        AVG(ping)::float8 AS ping,
 		        AVG(uptime)::float8 AS up,
 		        AVG(CASE WHEN status = 0 THEN 100.0 ELSE 0.0 END)::float8 AS dn,
-		        MIN(status)::int AS st
+		        MIN(status)::int AS st,
+		        AVG(net_in)::float8 AS ni,
+		        AVG(net_out)::float8 AS no
 		 FROM samples
 		 WHERE service = $1 AND ts >= $2::bigint
 		 GROUP BY k`,
@@ -326,6 +338,8 @@ export async function getSeries(service: string, range: Range = '24h', now = Dat
 			uptimeH: r && r.up != null ? r1(r.up / 3600) : null,
 			downPct: r ? r1(r.dn) : null,
 			status: r?.st ?? null,
+			netIn: r && r.ni != null ? r1(r.ni * 8 / 1000) : null,
+			netOut: r && r.no != null ? r1(r.no * 8 / 1000) : null,
 		});
 	}
 	return out;
