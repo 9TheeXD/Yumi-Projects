@@ -518,10 +518,10 @@ function durTh(ms) {
 
 function containerInfo(name) {
   try {
-    const out = execFileSync(DOCKER[0], [...DOCKER.slice(1), 'inspect', '-f', '{{.State.StartedAt}}|{{.RestartCount}}|{{.Config.Image}}', name],
+    const out = execFileSync(DOCKER[0], [...DOCKER.slice(1), 'inspect', '-f', '{{.State.StartedAt}}|{{.RestartCount}}|{{.Config.Image}}|{{.State.Pid}}', name],
       { encoding: 'utf8', timeout: 15_000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-    const [started, restarts, image] = out.split('|');
-    return { startedAt: Date.parse(started), restarts: Number(restarts), image };
+    const [started, restarts, image, pid] = out.split('|');
+    return { startedAt: Date.parse(started), restarts: Number(restarts), image, pid: Number(pid) || null };
   } catch { return null; }
 }
 
@@ -668,6 +668,32 @@ function usageCached(name) {
   return v;
 }
 
+// Network traffic of a container: byte counters of its own network namespace (/proc/<pid>/net/dev,
+// readable without root). The rate is the change since the previous reading; it resets when the
+// container restarts (new pid). rx = in (audio downloads), tx = out (audio sent to Discord).
+const netPrev = new Map();
+function netUsage(name, pid) {
+  if (!pid) return null;
+  let rx = 0, tx = 0;
+  try {
+    for (const line of fs.readFileSync(`/proc/${pid}/net/dev`, 'utf8').split('\n').slice(2)) {
+      const [iface, data] = line.split(':');
+      if (!data || iface.trim() === 'lo') continue;
+      const f = data.trim().split(/\s+/).map(Number);
+      rx += f[0]; tx += f[8];
+    }
+  } catch { return null; }
+  const now = Date.now();
+  const prev = netPrev.get(name);
+  let rate = prev?.pid === pid ? prev.rate : null;
+  if (prev?.pid === pid && now - prev.at >= 5_000 && rx >= prev.rx && tx >= prev.tx) {
+    const sec = (now - prev.at) / 1000;
+    rate = { rxBps: Math.round((rx - prev.rx) / sec), txBps: Math.round((tx - prev.tx) / sec) };
+  }
+  if (!prev || prev.pid !== pid || now - prev.at >= 5_000) netPrev.set(name, { pid, at: now, rx, tx, rate });
+  return { rxBps: rate?.rxBps ?? null, txBps: rate?.txBps ?? null, rxTotal: rx, txTotal: tx };
+}
+
 let snapshot = { at: 0, body: null, running: null };
 async function buildSnapshot() {
   const results = await Promise.all(NODES.map(probeNode));
@@ -689,6 +715,7 @@ async function buildSnapshot() {
       players: stats?.players ?? null, playingPlayers: stats?.playingPlayers ?? null,
       nodeUptimeMs: stats?.uptime ?? null,
       cpu: u?.cpu ?? null, mem: u ? { used: u.memUsed, total: u.memTotal, percent: u.memPercent } : null,
+      net: netUsage(containerOf(n), c?.pid),
       sources: Object.fromEntries(Object.entries(r.sources || {}).map(([k, v]) => [k, { ok: !!v.ok, off: !!v.off, level: v.level ?? null, error: v.error ?? null, errorTh: v.ok || v.off ? null : (explain(v.error) || null) }])),
       burner: burnerSet(n),
       history24: { uptime: h.uptime, youtube: h.youtube },
