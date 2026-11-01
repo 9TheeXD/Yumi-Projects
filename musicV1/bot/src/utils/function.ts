@@ -22,13 +22,20 @@ import { isDev, isM } from "./env.js";
 import { Player, Track } from "shoukaku";
 import { User } from "discord.js";
 import { musicSearch, portTrack } from "../music/resolver.js";
+import { NOTICE, notify } from "./friendly.js";
 
 const SAVE_FILE = path.join(process.cwd(), `players_${isDev ? 'dev' : isM ? 'music' : 'main'}.json`);
 
+// Saved players that could not be restored yet (voice join failed after a restart). They stay in the
+// save file until a retry works or gives up, so another restart in between does not lose them.
+type SavedPlayer = { guildId: string; voiceId: string; textId: string; [k: string]: any };
+const pendingRestore = new Map<string, SavedPlayer>();
+
 export function savePlayers(kazagumo: Kazagumo) {
-  const data = [];
+  const data: unknown[] = [...pendingRestore.values()].filter(d => !kazagumo.players.has(d.guildId));
 
   for (const player of kazagumo.players.values()) {
+    if (!player.voiceId) continue;
     data.push({
       guildId: player.guildId,
       voiceId: player.voiceId,
@@ -76,9 +83,18 @@ function loadPlayers() {
 export async function restorePlayers(client: Client, kazagumo: Kazagumo) {
   const head = chalk.bold('[RePlayer]');
   console.log(head, `Trying to restore players...`);
-  const saved = loadPlayers();
+  const saved: SavedPlayer[] = loadPlayers();
+  for (const data of saved) await restoreOne(client, kazagumo, data, 0);
+  console.log(head, `Restore players complete`);
+}
 
-  for (const data of saved) {
+const RESTORE_RETRY_MS = [30_000, 2 * 60_000, 5 * 60_000];
+
+async function restoreOne(client: Client, kazagumo: Kazagumo, data: SavedPlayer, attempt: number) {
+  const head = chalk.bold('[RePlayer]');
+  // Saved while out of any voice channel: nothing to rejoin.
+  if (!data.voiceId) { console.warn(head, `Skip ${data.guildId}: no voice channel saved`); pendingRestore.delete(data.guildId); return; }
+  {
     try {
       const player = await kazagumo.createPlayer({
         guildId: data.guildId,
@@ -141,40 +157,45 @@ export async function restorePlayers(client: Client, kazagumo: Kazagumo) {
       savePlayers(kazagumo);
       console.log(head, `Restore player for ${chalk.yellowBright(player.guildId)}`);
 
+      pendingRestore.delete(data.guildId);
     } catch (e) {
       console.error("Restore player error:", e);
+      if (!kazagumo.players.has(data.guildId)) {
+        const delay = RESTORE_RETRY_MS[attempt];
+        if (delay === undefined) {
+          pendingRestore.delete(data.guildId);
+          void notify(client, data.guildId, data.textId, 'restore', NOTICE.restoreFailed());
+        } else {
+          pendingRestore.set(data.guildId, data);
+          console.warn(head, `Retrying restore of ${data.guildId} in ${delay / 1000}s`);
+          setTimeout(() => { void restoreOne(client, kazagumo, data, attempt + 1); }, delay);
+        }
+        savePlayers(kazagumo);
+      }
     } finally {
       const p = kazagumo.players.get(data.guildId);
       if (p) p.restoring = false;
     }
   }
-
-  console.log(head, `Restore players complete`);
 }
 
-export function autoDisconnect(kazagumo: Kazagumo) {
+const IDLE_LEAVE_MS = 5 * 60_000;
+
+export function autoDisconnect(client: Client, kazagumo: Kazagumo) {
   const head = chalk.bold('[AutoDC]');
   setInterval(() => {
     const now = Date.now();
 
     for (const player of kazagumo.players.values()) {
-      const last = player.latestUpdate ?? 0;
-      const diff = now - last;
-
-      if(diff > 7*24*60*60*1000 && !player[247]){
-        console.log(head,`Destroy player ${player.guildId}`);
-        player.destroy();
-        continue;
-      };
-
-      if(diff > 10*60*1000 && player.voiceId){
-        if(player.queue.current || player.queue.size || player[247])continue;
-        console.log(head,`Disconnect ${player.guildId}`);
-        if(player.playing || !player.paused)player.pause(true);
-        player.destroy();
-      };
+      if (player[247] || player.recovering || player.restoring) continue;
+      if (player.queue.current || player.queue.size) { player.idleSince = undefined; continue; }
+      player.idleSince ??= now;
+      if (now - player.idleSince < IDLE_LEAVE_MS) continue;
+      console.log(head, `Leave idle player ${player.guildId}`);
+      void notify(client, player.guildId, player.textId, 'idle', NOTICE.idleLeft());
+      player.destroy().catch(() => {});
     }
-  }, 1*60*1_000);
+  }, 1*60_000);
 }
 
 function drawCover(ctx:any,img:any,w:number,h:number){

@@ -1,3 +1,4 @@
+import { friendlyError } from "../utils/friendly.js";
 import { ActionRowBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, CacheType, Interaction, ChannelSelectMenuBuilder, ColorResolvable, DiscordAPIError, Client, MessageFlags, ModalSubmitInteraction } from "discord.js";
 import chalk from 'chalk';
 import { setTimeout as wait } from 'node:timers/promises';
@@ -64,7 +65,7 @@ if(interaction.guild && interaction.customId.startsWith('music')){
 			});
       return await sendPStatus(client, kazagumo, player);
 		}catch(err){
-      return await interaction.reply({ content: `Error: ${err}`, flags: MessageFlags.Ephemeral }); /// lang
+      return await interaction.reply({ content: friendlyError(err, interaction.locale), flags: MessageFlags.Ephemeral }); /// lang
     };
 	};
 }

@@ -1,3 +1,4 @@
+import { friendlyError } from "../utils/friendly.js";
 import { CacheType, ChatInputCommandInteraction, Client, CommandInteraction, DiscordAPIError, Interaction, MessageFlags, TextDisplayBuilder, underline } from "discord.js";
 import chalk from "chalk";
 import { editPStatus, playerStatus_component, sendPStatus } from "../utils/messages.js";
@@ -44,7 +45,7 @@ if(interaction.guild){
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const member = interaction.guild.members.cache.get(interaction.member?.user.id || '');
     const sub = modeM ? interaction.commandName : (interaction.options.getSubcommandGroup() || interaction.options.getSubcommand());
-    console.debug(chalk.yellowBright.bold('[Yumi SC]'), `Command ${chalk.bold(interaction.options.getSubcommandGroup() ? `${interaction.options.getSubcommandGroup()} ${interaction.options.getSubcommand()}` : sub)} was interacted!`);
+    console.debug(chalk.yellowBright.bold('[Yumi SC]'), `Command ${chalk.bold(interaction.options.getSubcommandGroup() ? `${interaction.options.getSubcommandGroup()} ${interaction.options.getSubcommand()}` : sub)} was interacted by ${interaction.user.id} in ${interaction.guildId}`);
     if(!member)return;
     if(sub === 'play'){
       const query = interaction.options.getString('search', true);
@@ -86,7 +87,7 @@ if(interaction.guild){
         await sendPStatus(client, kazagumo, player);
       }catch(e: any){
         console.error(e);
-        await interaction.editReply({ content: `Error: ${e.message}` });  /// lang
+        await interaction.editReply({ content: friendlyError(e, interaction.locale) });  /// lang
       }
     }if(sub === 'pause'){
       if(!member.voice.channel){
@@ -109,7 +110,7 @@ if(interaction.guild){
         await interaction.deleteReply();
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'skip'){
@@ -133,7 +134,7 @@ if(interaction.guild){
         await interaction.deleteReply();
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'stop'){
@@ -164,7 +165,7 @@ if(interaction.guild){
         await interaction.deleteReply();
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'resume'){
@@ -188,7 +189,7 @@ if(interaction.guild){
         await interaction.deleteReply();
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'volume'){
@@ -218,7 +219,7 @@ if(interaction.guild){
         };
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'connect'){
@@ -249,7 +250,7 @@ if(interaction.guild){
         await interaction.deleteReply();
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'loop'){
@@ -279,7 +280,7 @@ if(interaction.guild){
         };
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'now'){
@@ -309,7 +310,7 @@ if(interaction.guild){
         await interaction.deleteReply();
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'shuffle'){
@@ -333,7 +334,7 @@ if(interaction.guild){
         await interaction.deleteReply();
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'seek'){
@@ -358,7 +359,7 @@ if(interaction.guild){
         await interaction.deleteReply();
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'queue'){
@@ -391,7 +392,7 @@ if(interaction.guild){
         await interaction.deleteReply();
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === '247'){
@@ -416,7 +417,7 @@ if(interaction.guild){
         await interaction.editReply(`Set 24/7 mode to \`${player[247] ? 'enabled' : 'disabled'}\``);
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     };

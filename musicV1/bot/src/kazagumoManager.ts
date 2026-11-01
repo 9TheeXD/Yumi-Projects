@@ -3,9 +3,10 @@ import { Connectors, Constants, Node, NodeOption, Track } from "shoukaku";
 import { findAlternative, portTrack, recordPlayback } from "./music/resolver.js";
 import Env from "./utils/env.js";
 import chalk from "chalk";
-import { Kazagumo, Plugins } from "kazagumo";
+import { Kazagumo, KazagumoPlayer, KazagumoTrack, Plugins } from "kazagumo";
 import { sendPStatus } from "./utils/messages.js";
 import { savePlayers } from "./utils/function.js";
+import { NOTICE, notify } from "./utils/friendly.js";
 import { musicNodes, nodeTiers, youtubeDownNodes } from "./music/nodes.js";
 
 
@@ -94,6 +95,37 @@ export default class KazagumoManager {
       }
     }) as typeof kazagumo.createPlayer;
 
+    const RETRY_WINDOW = 10 * 60_000;
+    const REJOIN_GAP = 5 * 60_000;
+    // Song or voice failed and every quick fix was used. Wait, then play the same song again
+    // (rejoining the channel first for voice trouble). Give up after 3 failures in RETRY_WINDOW and
+    // keep the player in the channel; autoDisconnect leaves later if nothing is played.
+    const retryLater = (p: KazagumoPlayer, track: KazagumoTrack, voice: boolean) => {
+      const now = Date.now();
+      p.failTimes = [...(p.failTimes ?? []).filter(at => now - at < RETRY_WINDOW), now];
+      if(p.failTimes.length > 3){
+        console.warn(headKE, `Giving up on ${track.title} in ${chalk.bold(p.guildId)}`);
+        void notify(client, p.guildId, p.textId, 'gaveup', NOTICE.trackGaveUp(track.title));
+        return;
+      }
+      void notify(client, p.guildId, p.textId, voice ? 'voice' : 'retry', voice ? NOTICE.voiceTrouble() : NOTICE.trackRetry(track.title));
+      p.recovering = true;
+      setTimeout(async () => {
+        try{
+          if(kazagumo.players.get(p.guildId) !== p || p.queue.current)return;
+          if(voice && p.voiceId){
+            const conn = kazagumo.shoukaku.connections.get(p.guildId);
+            kazagumo.KazagumoOptions.send(p.guildId, { op: 4, d: { guild_id: p.guildId, channel_id: p.voiceId, self_mute: conn?.muted ?? false, self_deaf: conn?.deafened ?? false } });
+            await new Promise(r => setTimeout(r, 3000));
+          }
+          console.warn(headKE, `Retrying ${track.title} in ${chalk.bold(p.guildId)}`);
+          p.queue.unshift(track);
+          await p.play();
+        }catch(err){ console.error(headKE, 'Retry error:', (err as Error).message); }
+        finally{ p.recovering = false; };
+      }, voice ? 30_000 : 15_000);
+    };
+
     kazagumo.shoukaku.on('ready', (name) => console.log(headS, `Node ${chalk.bold(name)} is ready!`));
     kazagumo.shoukaku.on('error', (name, error) => console.error(headSE, `Node ${chalk.bold(name)} error:`, error.message));
     kazagumo.shoukaku.on('disconnect', (name, count) => console.error(headSE, `Node ${chalk.bold(name)} disconnected: ${count}`));
@@ -138,23 +170,29 @@ export default class KazagumoManager {
       savePlayers(kazagumo);
  });kazagumo.on('playerStart', async(p, t)=>{
       console.log(headK, `Player was started: ${chalk.bold(p.guildId)}`);
+      p.idleSince = undefined;
       recordPlayback(t.sourceName);
       await sendPStatus(client, kazagumo, p, { from: 'playerStart event' });
       savePlayers(kazagumo);
  });kazagumo.on('playerEnd', async(p)=>{
       console.log(headK, `Player was ended: ${chalk.bold(p.guildId)}`);
       await sendPStatus(client, kazagumo, p, { from: 'playerEnd event' });
-      if(!p.recovering && p[247] !== true && p.queue.isEmpty && !p.queue.current && p.loop == 'none'){await p.destroy()};
+      if(!p.recovering && p[247] !== true && p.queue.isEmpty && !p.queue.current && p.loop == 'none'){await p.destroy(); return;};
+      if(!p.queue.current && p.queue.isEmpty && !p.recovering)p.idleSince ??= Date.now();
       savePlayers(kazagumo);
  });kazagumo.on('playerException', async(p, data)=>{
       const track = p.queue.current;
       const error = (data as { exception?: { message?: string } })?.exception?.message || 'unknown';
       console.error(headKE, `Track failed in ${chalk.bold(p.guildId)}: ${track?.title} (${track?.sourceName}):`, error);
       if(!track)return;
+      // Retry marks expire after RETRY_WINDOW. A looped song is the same track object for hours:
+      // a voice hiccup hours later must get the same recovery as the first one.
+      const tried = (key: string) => { const at = (track as unknown as Record<string, unknown>)[key]; return typeof at === 'number' && Date.now() - at < RETRY_WINDOW; };
+      const mark = (key: string) => { (track as unknown as Record<string, unknown>)[key] = Date.now(); };
       // NodeLink sometimes misses the voice-ready event when a track is sent right after joining
       // ("playerStateChange timed out"). Nothing is wrong with the song: play it again once, same source.
-      if(/playerStateChange timed out|Voice playback state timed out|UDP secretKey missing/i.test(error) && !(track as { voiceRetry?: boolean }).voiceRetry){
-        (track as { voiceRetry?: boolean }).voiceRetry = true;
+      if(/playerStateChange timed out|Voice playback state timed out|UDP secretKey missing/i.test(error) && !tried('voiceRetry')){
+        mark('voiceRetry');
         console.warn(headKE, `Voice start timeout in ${chalk.bold(p.guildId)}, replaying ${track.title}`);
         p.recovering = true;
         try{ p.queue.unshift(track); if(!p.playing)await p.play(); }catch(err){ console.error(headKE, 'Replay error:', err); }
@@ -165,8 +203,9 @@ export default class KazagumoManager {
       // no UDP info, DAVE handshake). The song is fine and every other source would fail the same way.
       // Rejoin the same channel (Discord hands out a new voice server) and play the same song again.
       const VOICE_ERR = /Voice WS closed|reconnection circuit breaker|missing UDP info|Voice connection timed out|\[DAVE\]/i;
-      if(VOICE_ERR.test(error) && !(track as { voiceRejoin?: boolean }).voiceRejoin && p.voiceId){
-        (track as { voiceRejoin?: boolean }).voiceRejoin = true;
+      if(VOICE_ERR.test(error) && !tried('voiceRejoin') && p.voiceId){
+        mark('voiceRejoin');
+        void notify(client, p.guildId, p.textId, 'voice', NOTICE.voiceTrouble());
         console.warn(headKE, `Voice server problem in ${chalk.bold(p.guildId)}, rejoining ${p.voiceId} and replaying ${track.title}`);
         p.recovering = true;
         try{
@@ -181,8 +220,8 @@ export default class KazagumoManager {
       }
       // Second voice start timeout: the song is still fine, the voice session on this node is not.
       // Move the player to another node and play the same song there (no other version).
-      if((/playerStateChange timed out|Voice playback state timed out/i.test(error) || VOICE_ERR.test(error)) && !(track as { nodeRetry?: boolean }).nodeRetry){
-        (track as { nodeRetry?: boolean }).nodeRetry = true;
+      if((/playerStateChange timed out|Voice playback state timed out/i.test(error) || VOICE_ERR.test(error)) && !tried('nodeRetry')){
+        mark('nodeRetry');
         const sp = p.shoukaku;
         const from = sp.node.name;
         const others = new Map([...kazagumo.shoukaku.nodes].filter(([n]) => n !== from));
@@ -202,24 +241,33 @@ export default class KazagumoManager {
         }
       }
       // Voice problems are not the song's fault: no source fallback, no source failure recorded.
-      if(VOICE_ERR.test(error)){ console.warn(headKE, `Voice still failing in ${chalk.bold(p.guildId)} after rejoin and node move`); return; }
+      if(VOICE_ERR.test(error)){
+        console.warn(headKE, `Voice still failing in ${chalk.bold(p.guildId)} after rejoin and node move`);
+        return retryLater(p, track, true);
+      }
       recordPlayback(track.sourceName, error);
       // One retry per song, on a different source.
-      if((track as { altRetry?: boolean }).altRetry)return;
-      p.recovering = true;
-      try{
-        const alt = await findAlternative(kazagumo, track, p.shoukaku.node.name);
-        if(alt){
-          (alt as { altRetry?: boolean }).altRetry = true;
-          console.log(headK, `Fallback for ${chalk.bold(track.title)}: ${alt.title} (${alt.sourceName})`);
-          p.queue.unshift(alt);
-          if(!p.playing && !p.queue.current)await p.play();
-        }
-      }catch(err){
-        console.error(headKE, 'Fallback error:', err);
-      }finally{
-        p.recovering = false;
-      };
+      if(!tried('altRetry')){
+        p.recovering = true;
+        try{
+          const alt = await findAlternative(kazagumo, track, p.shoukaku.node.name);
+          if(alt){
+            (alt as unknown as Record<string, unknown>).altRetry = Date.now();
+            console.log(headK, `Fallback for ${chalk.bold(track.title)}: ${alt.title} (${alt.sourceName})`);
+            p.queue.unshift(alt);
+            if(!p.playing && !p.queue.current)await p.play();
+            return;
+          }
+        }catch(err){
+          console.error(headKE, 'Fallback error:', err);
+        }finally{
+          p.recovering = false;
+        };
+      }
+      // Nothing worked. A looped song is what the user wants to hear: keep the player and try again later.
+      if(p.loop === 'track')return retryLater(p, track, false);
+      // Kazagumo moves on to the next song by itself.
+      void notify(client, p.guildId, p.textId, 'track', p.queue.length ? NOTICE.trackSkipped(track.title) : NOTICE.trackFailedEnd(track.title));
  });kazagumo.on('playerStuck', async(p)=>{
       console.warn(headKE, `Track stuck in ${chalk.bold(p.guildId)}: ${p.queue.current?.title}`);
       recordPlayback(p.queue.current?.sourceName, 'track stuck');
@@ -232,19 +280,46 @@ export default class KazagumoManager {
       console.debug({playing: player.playing, paused: player.paused});
 
       player.latestUpdate = Date.now();
-      // A restored player gets updates before its queue is refilled: do not drop it then.
-      if(!player.queue.current && player.queue.size == 0 && player[247] == false && !player.restoring){
-        try{player.disconnect();}
-        catch{(e: any)=>{console.log('')}};
-      };
+      // Nothing to play: autoDisconnect leaves after a few idle minutes. Leaving right away dropped
+      // players whose looped song failed once, before any recovery could run.
+      if(player.queue.current || player.queue.size || player.recovering || player.restoring)player.idleSince = undefined;
+      else player.idleSince ??= Date.now();
 
       savePlayers(kazagumo);
       await sendPStatus(client, kazagumo, player, { from: 'playerUpdate event' });
  });kazagumo.on('playerMoved', async(p, state, channels)=>{
       console.log(headK, `Player was moved: ${chalk.bold(p.guildId)}`);
       if(state === 'LEFT' && channels.oldChannelId){
-        console.log(headK, `Bot was kicked from channel ${channels.oldChannelId}`);
-        p.shoukaku.clean();
+        // Discord also drops the bot when a voice server dies. While people are still listening, come
+        // back once and continue the song. A second drop within REJOIN_GAP counts as a real kick.
+        const channel = client.guilds.cache.get(p.guildId)?.channels.cache.get(channels.oldChannelId);
+        const listeners = channel?.isVoiceBased() ? channel.members.filter(m => !m.user.bot).size : 0;
+        const track = p.queue.current;
+        const recent = p.rejoinedAt && Date.now() - p.rejoinedAt < REJOIN_GAP;
+        if(listeners && track && !recent){
+          console.warn(headKE, `Bot left channel ${channels.oldChannelId} in ${chalk.bold(p.guildId)} with ${listeners} listener(s), rejoining`);
+          p.rejoinedAt = Date.now();
+          p.recovering = true;
+          try{
+            const position = p.shoukaku.position;
+            await new Promise(r => setTimeout(r, 3000));
+            if(kazagumo.players.get(p.guildId) !== p)return;
+            p.voiceId = channels.oldChannelId;
+            const conn = kazagumo.shoukaku.connections.get(p.guildId);
+            kazagumo.KazagumoOptions.send(p.guildId, { op: 4, d: { guild_id: p.guildId, channel_id: channels.oldChannelId, self_mute: conn?.muted ?? false, self_deaf: conn?.deafened ?? false } });
+            await new Promise(r => setTimeout(r, 3000));
+            p.queue.unshift(track);
+            await p.play();
+            if(position > 0 && track.isSeekable)await p.seek(position).catch(()=>{});
+            void notify(client, p.guildId, p.textId, 'rejoin', NOTICE.rejoined());
+          }catch(err){ console.error(headKE, 'Rejoin error:', (err as Error).message); }
+          finally{ p.recovering = false; };
+        }else{
+          console.log(headK, `Bot was removed from channel ${channels.oldChannelId}`);
+          void notify(client, p.guildId, p.textId, 'left', NOTICE.left());
+          await p.destroy().catch(()=>{});
+          return;
+        }
       };
       savePlayers(kazagumo);
  });kazagumo.on('playerDestroy', async(p)=>{

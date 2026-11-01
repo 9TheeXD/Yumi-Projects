@@ -90,6 +90,11 @@ declare module 'discord.js' {
     247: boolean;
     recovering?: boolean;
     restoring?: boolean;
+    // Since when nothing has been playing (autoDisconnect leaves after a few minutes).
+    idleSince?: number;
+    // Recent unrecoverable failures, and the last automatic rejoin after the bot was dropped.
+    failTimes?: number[];
+    rejoinedAt?: number;
   }
   interface KazagumoEvents {
     debug: [message: string];
@@ -159,7 +164,7 @@ const kazagumo = new KazagumoManager(client) as Kazagumo;
 
     await new Promise(r => setTimeout(r, 1_000));
     await restorePlayers(client, kazagumo);
-    autoDisconnect(kazagumo);
+    autoDisconnect(client, kazagumo);
   });
 
   await client.login(Env('BOT_TOKEN'));

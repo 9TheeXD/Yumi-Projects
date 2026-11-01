@@ -1,3 +1,4 @@
+import { friendlyError } from "../utils/friendly.js";
 import chalk from 'chalk';
 import { Client, CacheType, Interaction, DiscordAPIError, MessageFlags, ButtonInteraction, ModalBuilder, TextInputBuilder, ActionRowBuilder, TextInputStyle } from 'discord.js';
 import { editPStatus, playerStatus_component, sendPStatus } from '../utils/messages.js';
@@ -20,7 +21,7 @@ async function expired(interaction: ButtonInteraction<CacheType>) {
 };
 
 if(interaction.guild && interaction.customId.startsWith('music')){
-  console.debug(chalk.yellowBright.bold('[Yumi SC]'), `Button ${chalk.bold(interaction.customId)} was clicked!`);
+  console.debug(chalk.yellowBright.bold('[Yumi SC]'), `Button ${chalk.bold(interaction.customId)} was clicked by ${interaction.user.id} in ${interaction.guildId}`);
 	const player = kazagumo.players.get(interaction.guild.id);
   if(player && !player.textId)interaction.channelId && player.setTextChannel(interaction.channelId);
   if(player && !player.messageId)player.messageId = interaction.message.id || undefined;
@@ -40,7 +41,7 @@ if(interaction.guild && interaction.customId.startsWith('music')){
       await player.destroy();
       return await editPStatus(interaction, kazagumo, player);
     }catch(err){
-      return await interaction.reply({ content: `Error: ${err}`, flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: friendlyError(err, interaction.locale), flags: MessageFlags.Ephemeral });
     };
 	};if(interaction.customId === 'music_play'){
     if(!player)return expired(interaction);
@@ -54,7 +55,7 @@ if(interaction.guild && interaction.customId.startsWith('music')){
       // return await sendPStatus(client, player);
       return await editPStatus(interaction, kazagumo, player);
     }catch(err){
-      return await interaction.reply({ content: `Error: ${err}`, flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: friendlyError(err, interaction.locale), flags: MessageFlags.Ephemeral });
     };
   };if(interaction.customId === 'music_pause'){
     if(!player)return expired(interaction);
@@ -67,7 +68,7 @@ if(interaction.guild && interaction.customId.startsWith('music')){
       // return await sendPStatus(client, player);
       return await editPStatus(interaction, kazagumo, player);
     }catch(err){
-      return await interaction.reply({ content: `Error: ${err}`, flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: friendlyError(err, interaction.locale), flags: MessageFlags.Ephemeral });
     };
   };if(interaction.customId === 'music_volume'){
     if(!player)return expired(interaction);
@@ -85,7 +86,7 @@ if(interaction.guild && interaction.customId.startsWith('music')){
       // return await sendPStatus(client, player);
       return;
     }catch(err){
-      return await interaction.reply({ content: `Error: ${err}`, flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: friendlyError(err, interaction.locale), flags: MessageFlags.Ephemeral });
     };
   };if(interaction.customId === 'music_shuffle'){
     if(!player)return expired(interaction);
@@ -95,7 +96,7 @@ if(interaction.guild && interaction.customId.startsWith('music')){
       // return await sendPStatus(client, player);
       return await editPStatus(interaction, kazagumo, player);
     }catch(err){
-      return await interaction.reply({ content: `Error: ${err}`, flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: friendlyError(err, interaction.locale), flags: MessageFlags.Ephemeral });
     };
   };if(interaction.customId === 'music_refresh'){
     if(!player)return expired(interaction);
@@ -111,7 +112,7 @@ if(interaction.guild && interaction.customId.startsWith('music')){
       // console.log(player.messageId);
       return;
     }catch(err){
-      return await interaction.reply({ content: `Error: ${err}`, flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: friendlyError(err, interaction.locale), flags: MessageFlags.Ephemeral });
     };
   };if(interaction.customId === 'music_next'){
     if(!player){
@@ -122,7 +123,7 @@ if(interaction.guild && interaction.customId.startsWith('music')){
       // return await sendPStatus(client, player);
       return await editPStatus(interaction, kazagumo, player);
     }catch(err){
-      return await interaction.reply({ content: `Error: ${err}`, flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: friendlyError(err, interaction.locale), flags: MessageFlags.Ephemeral });
     };
   };if(interaction.customId === 'music_prev'){
     if(!player){
@@ -135,7 +136,7 @@ if(interaction.guild && interaction.customId.startsWith('music')){
       // return await sendPStatus(client, player);
       return await editPStatus(interaction, kazagumo, player);
     }catch(err){
-      return await interaction.reply({ content: `Error: ${err}`, flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: friendlyError(err, interaction.locale), flags: MessageFlags.Ephemeral });
     };
   };if(interaction.customId === 'music_repeat_off'){
     if(!player){
@@ -146,7 +147,7 @@ if(interaction.guild && interaction.customId.startsWith('music')){
       // return await sendPStatus(client, player);
       return await editPStatus(interaction, kazagumo, player);
     }catch(err){
-      return await interaction.reply({ content: `Error: ${err}`, flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: friendlyError(err, interaction.locale), flags: MessageFlags.Ephemeral });
     };
   };if(interaction.customId === 'music_repeat_queue'){
     if(!player)return expired(interaction);
@@ -156,7 +157,7 @@ if(interaction.guild && interaction.customId.startsWith('music')){
       // return await sendPStatus(client, player);
       return await editPStatus(interaction, kazagumo, player);
     }catch(err){
-      return await interaction.reply({ content: `Error: ${err}`, flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: friendlyError(err, interaction.locale), flags: MessageFlags.Ephemeral });
     };
   };if(interaction.customId === 'music_repeat_track'){
     if(!player)return expired(interaction);
@@ -166,7 +167,7 @@ if(interaction.guild && interaction.customId.startsWith('music')){
       // return await sendPStatus(client, player);
       return await editPStatus(interaction, kazagumo, player);
     }catch(err){
-      return await interaction.reply({ content: `Error: ${err}`, flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: friendlyError(err, interaction.locale), flags: MessageFlags.Ephemeral });
     };
   };if(interaction.customId === 'music_queue'){
     if(!player)return expired(interaction);
@@ -176,7 +177,7 @@ if(interaction.guild && interaction.customId.startsWith('music')){
 
       return await editPStatus(interaction, kazagumo, player);
     }catch(err){
-      return await interaction.reply({ content: `Error: ${err}`, flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: friendlyError(err, interaction.locale), flags: MessageFlags.Ephemeral });
     };
   };if(interaction.customId === 'music_info'){
     if(!player)return expired(interaction);
@@ -184,7 +185,7 @@ if(interaction.guild && interaction.customId.startsWith('music')){
       player.showInfo = !player.showInfo;
       return await editPStatus(interaction, kazagumo, player);
     }catch(err){
-      return await interaction.reply({ content: `Error: ${err}`, flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: friendlyError(err, interaction.locale), flags: MessageFlags.Ephemeral });
     };
   };
 	
