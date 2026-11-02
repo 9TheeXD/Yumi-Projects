@@ -126,6 +126,44 @@ export default class KazagumoManager {
       }, voice ? 30_000 : 15_000);
     };
 
+    // A track exception is followed by a loadFailed end, and Kazagumo handles that end by playing the
+    // next song itself. Replaying the failed song from the exception handler raced it: both songs
+    // started, the end cut the replay off, and a run of songs was skipped within seconds.
+    // So hold the rest of the queue back until that end has passed, play the same song again
+    // (on another node when one is free), then put the queue back behind it.
+    const replayAfterEnd = async (p: KazagumoPlayer, track: KazagumoTrack, opts: { otherNode?: boolean; delay?: number } = {}) => {
+      p.recovering = true;
+      const rest = [...p.queue];
+      p.queue.clear();
+      try{
+        await new Promise<void>(r => { const t = setTimeout(r, 3000); p.shoukaku.once('end', () => { clearTimeout(t); setImmediate(r); }); });
+        if(opts.delay)await new Promise(r => setTimeout(r, opts.delay));
+        if(kazagumo.players.get(p.guildId) !== p)return;
+        const sp = p.shoukaku;
+        const from = sp.node.name;
+        const target = opts.otherNode ? kazagumo.shoukaku.options.nodeResolver(new Map([...kazagumo.shoukaku.nodes].filter(([n]) => n !== from))) : undefined;
+        if(target){
+          const raw = (track.getRaw() as { _raw?: Track })._raw;
+          const ported = raw ? await portTrack(kazagumo, raw, target as unknown as Node) : null;
+          const encoded = ported?.encoded ?? raw?.encoded ?? track.track;
+          await sp.node.rest.destroyPlayer(p.guildId).catch(()=>{});
+          sp.node = target;
+          p.queue.current = track;
+          await sp.update({ ...sp.data.playerOptions, track: { encoded }, position: 0, paused: false });
+          console.warn(headKE, `Replaying ${track.title} in ${chalk.bold(p.guildId)} on ${target.name} (was ${from})`);
+        }else{
+          p.queue.current = null;
+          p.queue.unshift(track);
+          await p.play();
+          console.warn(headKE, `Replaying ${track.title} in ${chalk.bold(p.guildId)} on ${from}`);
+        }
+      }catch(err){ console.error(headKE, 'Replay error:', (err as Error).message); }
+      finally{
+        p.queue.push(...rest);
+        p.recovering = false;
+      }
+    };
+
     kazagumo.shoukaku.on('ready', (name) => console.log(headS, `Node ${chalk.bold(name)} is ready!`));
     kazagumo.shoukaku.on('error', (name, error) => console.error(headSE, `Node ${chalk.bold(name)} error:`, error.message));
     kazagumo.shoukaku.on('disconnect', (name, count) => console.error(headSE, `Node ${chalk.bold(name)} disconnected: ${count}`));
@@ -171,7 +209,7 @@ export default class KazagumoManager {
  });kazagumo.on('playerStart', async(p, t)=>{
       console.log(headK, `Player was started: ${chalk.bold(p.guildId)}`);
       p.idleSince = undefined;
-      recordPlayback(t.sourceName);
+      recordPlayback(t?.sourceName); // null when a node move resumes a player that had no current track
       await sendPStatus(client, kazagumo, p, { from: 'playerStart event' });
       savePlayers(kazagumo);
  });kazagumo.on('playerEnd', async(p)=>{
@@ -189,14 +227,13 @@ export default class KazagumoManager {
       // a voice hiccup hours later must get the same recovery as the first one.
       const tried = (key: string) => { const at = (track as unknown as Record<string, unknown>)[key]; return typeof at === 'number' && Date.now() - at < RETRY_WINDOW; };
       const mark = (key: string) => { (track as unknown as Record<string, unknown>)[key] = Date.now(); };
-      // NodeLink sometimes misses the voice-ready event when a track is sent right after joining
-      // ("playerStateChange timed out"). Nothing is wrong with the song: play it again once, same source.
+      // No audio within 15 s ("playerStateChange timed out"): either the node missed the voice-ready
+      // event, or its YouTube stream gave nothing (403 on that node's IP or account). Both are about
+      // this node, not the song: play the same song again on another node once.
       if(/playerStateChange timed out|Voice playback state timed out|UDP secretKey missing/i.test(error) && !tried('voiceRetry')){
         mark('voiceRetry');
         console.warn(headKE, `Voice start timeout in ${chalk.bold(p.guildId)}, replaying ${track.title}`);
-        p.recovering = true;
-        try{ p.queue.unshift(track); if(!p.playing)await p.play(); }catch(err){ console.error(headKE, 'Replay error:', err); }
-        finally{ p.recovering = false; };
+        void replayAfterEnd(p, track, { otherNode: !/UDP secretKey/i.test(error) });
         return;
       }
       // Discord voice server trouble (voice server crashed: close 4015, node gave up reconnecting,
@@ -207,38 +244,16 @@ export default class KazagumoManager {
         mark('voiceRejoin');
         void notify(client, p.guildId, p.textId, 'voice', NOTICE.voiceTrouble());
         console.warn(headKE, `Voice server problem in ${chalk.bold(p.guildId)}, rejoining ${p.voiceId} and replaying ${track.title}`);
-        p.recovering = true;
-        try{
-          const conn = kazagumo.shoukaku.connections.get(p.guildId);
-          kazagumo.KazagumoOptions.send(p.guildId, { op: 4, d: { guild_id: p.guildId, channel_id: p.voiceId, self_mute: conn?.muted ?? false, self_deaf: conn?.deafened ?? false } });
-          await new Promise(r => setTimeout(r, 3000));
-          p.queue.unshift(track);
-          if(!p.playing)await p.play();
-        }catch(err){ console.error(headKE, 'Voice rejoin error:', (err as Error).message); }
-        finally{ p.recovering = false; };
+        const conn = kazagumo.shoukaku.connections.get(p.guildId);
+        kazagumo.KazagumoOptions.send(p.guildId, { op: 4, d: { guild_id: p.guildId, channel_id: p.voiceId, self_mute: conn?.muted ?? false, self_deaf: conn?.deafened ?? false } });
+        void replayAfterEnd(p, track, { delay: 3000 });
         return;
       }
-      // Second voice start timeout: the song is still fine, the voice session on this node is not.
-      // Move the player to another node and play the same song there (no other version).
-      if((/playerStateChange timed out|Voice playback state timed out/i.test(error) || VOICE_ERR.test(error)) && !tried('nodeRetry')){
+      // Voice still failing after the rejoin: move to another node once.
+      if(VOICE_ERR.test(error) && !tried('nodeRetry')){
         mark('nodeRetry');
-        const sp = p.shoukaku;
-        const from = sp.node.name;
-        const others = new Map([...kazagumo.shoukaku.nodes].filter(([n]) => n !== from));
-        const target = kazagumo.shoukaku.options.nodeResolver(others);
-        if(target){
-          p.recovering = true;
-          try{
-            const raw = (track.getRaw() as { _raw?: Track })._raw;
-            const ported = raw ? await portTrack(kazagumo, raw, target as unknown as Node) : null;
-            await sp.node.rest.destroyPlayer(p.guildId).catch(()=>{});
-            sp.node = target;
-            await sp.update({ ...sp.data.playerOptions, track: { encoded: ported?.encoded ?? sp.track ?? raw?.encoded ?? null }, position: 0 });
-            console.warn(headKE, `Voice start timeout again in ${chalk.bold(p.guildId)}, moved ${track.title} from ${from} to ${target.name}`);
-          }catch(err){ console.error(headKE, 'Node retry error:', (err as Error).message); }
-          finally{ p.recovering = false; };
-          return;
-        }
+        void replayAfterEnd(p, track, { otherNode: true });
+        return;
       }
       // Voice problems are not the song's fault: no source fallback, no source failure recorded.
       if(VOICE_ERR.test(error)){
