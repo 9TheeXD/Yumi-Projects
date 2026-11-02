@@ -117,7 +117,9 @@ async function streamCheck(n, encoded) {
   return { ok: !!r.json?.url, error: r.json?.url ? undefined : 'no stream url', format: r.json?.format };
 }
 
-async function probeNode(n) {
+// sources=false: only /version (ping, up). Source probes call the music services (Spotify's API
+// has a daily quota), so they run once per round, not on every status page request.
+async function probeNode(n, { sources = true } = {}) {
   const out = { name: n.name, kind: n.kind, up: false, version: null, sources: {}, error: null };
   try {
     const t0 = Date.now();
@@ -130,6 +132,7 @@ async function probeNode(n) {
     out.error = e.message;
     return out;
   }
+  if (!sources) return out;
   let managers = null;
   try { managers = (await call(n, 'GET', '/v4/info')).json?.sourceManagers ?? null; } catch {}
   for (const p of PROBES) {
@@ -696,9 +699,10 @@ function netUsage(name, pid) {
 
 let snapshot = { at: 0, body: null, running: null };
 async function buildSnapshot() {
-  const results = await Promise.all(NODES.map(probeNode));
   const st = readJson(STATE_FILE, {});
   const fresh = Date.now() - Date.parse(st.at || 0) < 15 * 60_000;
+  // Reuse the last round's source results; probe sources here only when the round loop is not running.
+  const results = await Promise.all(NODES.map(n => probeNode(n, { sources: !fresh })));
   const nodes = [];
   for (const n of NODES) {
     const r = results.find(x => x.name === n.name);
