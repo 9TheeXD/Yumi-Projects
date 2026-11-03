@@ -259,19 +259,29 @@ async function _backend(send2mail: boolean): Promise<StatusData> {
 async function _frontend_main(send2mail: boolean): Promise<StatusData> {
 	const startTime = Date.now();
 	try{
-		const res = await axios.get(`https://yumistack.net/`, { httpsAgent, timeout: FRONTEND_TIMEOUT_MS });
-		if (res.status < 200 || res.status >= 400) throw new Error(`HTTP ${res.status}`);
+		// เว็บหลักส่งสถานะผ่าน /api/status (รูปแบบเดียวกับ bot และ backend)
+		let res = await axios.get<StatusData>(`https://yumistack.net/api/status`, { httpsAgent, timeout: FRONTEND_TIMEOUT_MS, validateStatus: s => s === 404 || (s >= 200 && s < 400) });
+		if (res.status === 404) {
+			// เว็บรุ่นเก่ายังไม่มี endpoint นี้: เช็คแค่หน้าแรกเหมือนเดิม ไม่ให้ขึ้นว่าล่ม
+			const home = await axios.get(`https://yumistack.net/`, { httpsAgent, timeout: FRONTEND_TIMEOUT_MS });
+			if (home.status < 200 || home.status >= 400) throw new Error(`HTTP ${home.status}`);
+			active.delete('frontend_main');
+			return { name: `frontend_main`, status: 1, ping: Date.now() - startTime, uptime: undefined, startTime: undefined, host: `https://yumistack.net/`, version: undefined, resources: undefined };
+		}
+		const loadData = res.data;
+		if(!loadData || !loadData.name || !loadData.status) throw new Error('ข้อมูลที่ได้รับไม่ถูกต้อง');
 
 		active.delete('frontend_main');
 		return {
 			name: `frontend_main`,
-			status: 1,
-			ping: (Date.now() - startTime),
-			uptime: undefined,
-			startTime: undefined,
-			host: `https://yumistack.net/`,
-			version: undefined,
-			resources: undefined
+			status: loadData.status,
+			// ping: เวลาตอบสนองจริงจากฝั่ง status (เว็บไม่ได้วัดให้)
+			ping: loadData.ping ?? (Date.now() - startTime),
+			uptime: loadData.uptime,
+			startTime: loadData.startTime,
+			host: loadData.host,
+			version: loadData.version,
+			resources: hostResources(loadData.resources)
 		};
 	}catch(err){
 		const rl = asRateLimit(err); if(rl) throw rl;
