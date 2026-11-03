@@ -639,6 +639,8 @@ export interface TimelineItem {
 	duration: number;
 	cause: string | null;
 	note: string | null;
+	/** ช่วงนี้เป็นส่วนที่ต่อเนื่องจากช่วงที่เริ่มเมื่อเวลานี้ (ถูกตัดด้วย "ไม่มีข้อมูล") */
+	since?: number;
 }
 const TIMELINE_DAYS = 30;
 const TIMELINE_MAX = 400;
@@ -651,7 +653,8 @@ export async function getTimeline(service: string, now = Date.now()): Promise<Ti
 		[service, from])).rows.map(toSeg);
 	const gaps = (await pool.query<{ s: string; e: string }>(
 		`SELECT started_at AS s, ended_at AS e FROM gaps WHERE service = $1 AND ended_at > $2::bigint`, [service, from])).rows;
-	const items: TimelineItem[] = segs.map(g => {
+	const gapList = gaps.map(x => ({ s: Number(x.s), e: Number(x.e) })).sort((a, b) => a.s - b.s);
+	const items: TimelineItem[] = segs.flatMap(g => {
 		const end = g.end;
 		const dur = (end ?? now) - g.start;
 		let kind: TimelineKind;
@@ -660,9 +663,22 @@ export async function getTimeline(service: string, now = Date.now()): Promise<Ti
 		// อัปเดตที่ไม่นานเกินกำหนด: กำลังอัปเดต (เขียวเข้ม) / อัปเดตแล้ว (เขียวเข้ม) นานเกิน: แดงเหมือนล่มจริง
 		else if (g.kind === 'update' && dur <= UPDATE_MAX_MS) kind = end === null ? 'upd' : 'updated';
 		else kind = dur < 5 * 60_000 ? 'warn' : 'down';
-		return { kind, start: g.start, end, duration: dur, cause: g.status === 0 ? g.cause : null, note: g.note };
+		// ช่วง "ไม่มีข้อมูล" ที่อยู่ในช่วงนี้ตัดช่วงออกเป็นส่วนๆ เพื่อให้เรียงตามเวลาจริง (ต่อเนื่องตามนาฬิกา แต่แสดงแยกตามรอยขาด)
+		const pieces: { a: number; b: number }[] = [];
+		let cur = g.start;
+		const segEnd = end ?? now;
+		for (const x of gapList) {
+			if (x.e <= cur || x.s >= segEnd) continue;
+			if (x.s > cur) pieces.push({ a: cur, b: x.s });
+			cur = Math.max(cur, x.e);
+		}
+		if (cur < segEnd || !pieces.length) pieces.push({ a: cur, b: segEnd });
+		return pieces.map((p, i) => ({
+			kind, start: p.a, end: end === null && i === pieces.length - 1 ? null : p.b, duration: p.b - p.a,
+			cause: g.status === 0 ? g.cause : null, note: g.note, since: p.a !== g.start ? g.start : undefined,
+		}));
 	});
-	for (const x of gaps) items.push({ kind: 'gap', start: Number(x.s), end: Number(x.e), duration: Number(x.e) - Number(x.s), cause: null, note: null });
+	for (const x of gapList) items.push({ kind: 'gap', start: x.s, end: x.e, duration: x.e - x.s, cause: null, note: null });
 	return items.sort((a, b) => b.start - a.start).slice(0, TIMELINE_MAX);
 }
 
