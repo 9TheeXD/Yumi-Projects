@@ -140,7 +140,7 @@ a{color:inherit;text-decoration:none}button{font:inherit}
 .banner.warn{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.4);color:#fbbf24}
 .banner.danger{background:rgba(255,90,95,.12);border-color:rgba(255,90,95,.45);color:#ff9ea1}
 .tag.maint{background:rgba(76,201,240,.14);color:#8fdcf6;border-color:rgba(76,201,240,.35)}
-.strip i.warn{background:var(--warn);opacity:1;z-index:1}.strip i.upd{background:var(--upd);opacity:1;z-index:1}
+.strip i.warn{background:var(--warn);opacity:1;z-index:1}.strip i.upd{background:var(--upd);opacity:1;z-index:1}.strip i.na{background:#5a4f4f;opacity:1;z-index:2}
 .strip i{cursor:pointer;transition:filter .15s}
 .strip i:hover{filter:brightness(1.35)}
 .strip i.load{background:var(--load)}
@@ -310,7 +310,7 @@ export const resourcePanels = (series: SeriesPoint[]) => {
 
 /** รายละเอียดของแต่ละช่วงในไทม์ไลน์: สี เวลา ระยะเวลา สาเหตุ และหมายเหตุ */
 export const segTip = (g: Report['strip'][number], label: string, k: string) => {
-	const col = k === 'down' ? '#ff5a5f' : k === 'warn' ? '#fbbf24' : k === 'upd' ? '#1f9d5c' : k === 'load' ? '#4cc9f0' : '#3ddc97';
+	const col = k === 'na' ? '#9a8a88' : k === 'down' ? '#ff5a5f' : k === 'warn' ? '#fbbf24' : k === 'upd' ? '#1f9d5c' : k === 'load' ? '#4cc9f0' : '#3ddc97';
 	const lines = [
 		`<div style="color:${col};font-weight:600">● ${esc(label)}${k === 'warn' ? ` ${t('seg_short')}` : ''}</div>`,
 		`<div>${t('seg_since', { t: fmtDateTh(g.start) })}</div>`,
@@ -350,8 +350,8 @@ export function renderDetail(s: StatusData, r: Report, b: Brief, limitedUntil: n
 
 	const span = now - r.from;
 	const strip = r.strip.map(g => {
-		const k = g.status === 1 ? 'ok' : g.status === 0 ? (g.upd ? 'upd' : g.end - g.start < 5 * 60_000 ? 'warn' : 'down') : 'load';
-		const label = g.status === 1 ? t('state_ok') : g.status === 0 ? (g.upd ? t('state_upd') : t('state_down')) : t('state_load');
+		const k = g.gap ? 'na' : g.status === 1 ? 'ok' : g.status === 0 ? (g.upd ? 'upd' : g.end - g.start < 5 * 60_000 ? 'warn' : 'down') : 'load';
+		const label = g.gap ? t('no_data') : g.status === 1 ? t('state_ok') : g.status === 0 ? (g.upd ? t('state_upd') : t('state_down')) : t('state_load');
 		return `<i class="${k}" style="left:${g.left.toFixed(3)}%;width:${g.width.toFixed(3)}%" data-tip="${esc(segTip(g, label, k))}"></i>`;
 	}).join('');
 

@@ -272,8 +272,8 @@ export function renderMusicNode(n: MusicNode, r: Report, b: Brief, range: Range,
 
 	const span = now - r.from;
 	const strip = r.strip.map(g => {
-		const kk = g.status === 1 ? 'ok' : g.status === 0 ? (g.upd ? 'upd' : g.end - g.start < 5 * 60_000 ? 'warn' : 'down') : 'load';
-		const label = g.status === 1 ? t('state_ok') : g.status === 0 ? (g.upd ? t('state_upd') : t('state_down')) : t('state_unknown');
+		const kk = g.gap ? 'na' : g.status === 1 ? 'ok' : g.status === 0 ? (g.upd ? 'upd' : g.end - g.start < 5 * 60_000 ? 'warn' : 'down') : 'load';
+		const label = g.gap ? t('no_data') : g.status === 1 ? t('state_ok') : g.status === 0 ? (g.upd ? t('state_upd') : t('state_down')) : t('state_unknown');
 		return `<i class="${kk}" style="left:${g.left.toFixed(3)}%;width:${g.width.toFixed(3)}%" data-tip="${esc(segTip(g, label, kk))}"></i>`;
 	}).join('');
 

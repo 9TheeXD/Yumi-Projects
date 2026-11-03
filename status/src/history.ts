@@ -23,6 +23,8 @@ const SEG_KEEP_MS = 3650 * DAY;
 const PING_KEEP_MS = 90 * DAY;
 const SAMPLE_KEEP_MS = 90 * DAY;
 const SERIES_POINTS = 300;
+/** ช่วงที่ระบบ status ไม่ได้บันทึกนานกว่านี้ถือว่า "ไม่มีข้อมูล" (ปกติบันทึกถี่กว่านี้มาก) */
+const GAP_MS = 30_000;
 /** ช่วงอัปเดตที่ยาวเกินนี้ถือว่าผิดปกติ: กลับไปแสดงเป็นหยุดทำงาน (สีแดง) ตั้งได้ด้วย env UPDATE_MAX_MIN */
 export const UPDATE_MAX_MS = (Number(process.env.UPDATE_MAX_MIN) > 0 ? Number(process.env.UPDATE_MAX_MIN) : 15) * 60_000;
 /** แอดมินตั้งสถานะอัปเดตไว้แต่บริการยังไม่ล่ม: รอได้นานเท่านี้ก่อนยกเลิกเอง */
@@ -100,6 +102,13 @@ export function initHistory(): Promise<void> {
 				ALTER TABLE segments ADD COLUMN IF NOT EXISTS note TEXT;
 				ALTER TABLE segments ADD COLUMN IF NOT EXISTS note_at BIGINT;
 				ALTER TABLE segments ADD COLUMN IF NOT EXISTS kind TEXT;
+				CREATE TABLE IF NOT EXISTS gaps(
+					id BIGSERIAL PRIMARY KEY,
+					service TEXT NOT NULL,
+					started_at BIGINT NOT NULL,
+					ended_at BIGINT NOT NULL
+				);
+				CREATE INDEX IF NOT EXISTS idx_gaps_service_start ON gaps(service, started_at);
 				CREATE TABLE IF NOT EXISTS settings(
 					key TEXT PRIMARY KEY,
 					value TEXT NOT NULL,
@@ -107,8 +116,8 @@ export function initHistory(): Promise<void> {
 				);
 			`);
 			await migrateHostBasis();
-			// ช่วงที่ค้างเปิดอยู่ตอนโปรแกรมดับ ให้ปิดที่เวลาที่เห็นล่าสุด (ไม่นับเป็น downtime)
-			await pool.query(`UPDATE segments SET ended_at = last_seen WHERE ended_at IS NULL`);
+			// ช่วงที่ค้างเปิดอยู่ตอนโปรแกรมดับ: ไม่ปิด รอบแรกที่เช็คสถานะเสร็จจะต่อจากเดิมตามนาฬิกา
+			// (ช่วงที่โปรแกรมดับบันทึกเป็น gap = ไม่มีข้อมูล ไม่นับว่า up หรือ down)
 			// เวอร์ชันล่าสุดที่เคยเห็นของแต่ละ service (ไว้จับการเปลี่ยนเวอร์ชันหลังจากเริ่มระบบใหม่)
 			const vs = await pool.query<{ service: string; version: string }>(
 				`SELECT DISTINCT ON (service) service, version FROM samples WHERE version IS NOT NULL ORDER BY service, ts DESC`);
@@ -214,6 +223,14 @@ export function recordStatus(list: SampleStatus[], now = Date.now()): Promise<Up
 	return job.catch(() => []);
 }
 
+/** ถ้าระบบ status หยุดบันทึกนานเกิน GAP_MS: จดเป็นช่วง "ไม่มีข้อมูล" แล้วขยับ last_seen เพื่อไม่ให้จดซ้ำ */
+async function recordGap(client: pg.PoolClient, service: string, row: { id: string; last_seen: string }, now: number) {
+	const last = Number(row.last_seen);
+	if (now - last <= GAP_MS) return;
+	await client.query(`INSERT INTO gaps(service, started_at, ended_at) VALUES ($1, $2, $3)`, [service, last, now]);
+	await client.query(`UPDATE segments SET last_seen = $1 WHERE id = $2`, [now, row.id]);
+}
+
 async function write(list: SampleStatus[], now: number): Promise<UpdateEvent[]> {
 	await initHistory();
 	const events: UpdateEvent[] = [];
@@ -223,7 +240,20 @@ async function write(list: SampleStatus[], now: number): Promise<UpdateEvent[]> 
 	try {
 		await client.query('BEGIN');
 		for (const s of list) {
-			const cur = open.get(s.name);
+			let cur = open.get(s.name);
+			if (!cur) {
+				// เพิ่งเริ่มระบบ (หรือโหลดใหม่หลังบันทึกพลาด): ต่อจากช่วงที่ค้างเปิดอยู่ใน DB
+				const row = (await client.query<{ id: string; status: number; started_at: string; last_seen: string }>(
+					`SELECT id, status, started_at, last_seen FROM segments WHERE service = $1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`, [s.name])).rows[0];
+				if (row) {
+					// ยังไม่รู้สถานะแน่ชัด (-1) ระหว่างรอยืนยัน: รอไปก่อน ไม่ตัดช่วงเดิมทิ้ง
+					if (s.status === -1 && row.status !== -1) { await recordGap(client, s.name, row, now); continue; }
+					await recordGap(client, s.name, row, now);
+					cur = { id: row.id, status: row.status, touched: now };
+					open.set(s.name, cur);
+					if (row.status === 0) lastDown.set(s.name, { id: row.id, start: Number(row.started_at) });
+				}
+			}
 			if (!cur || cur.status !== s.status) {
 				if (cur) await client.query(`UPDATE segments SET ended_at = $1, last_seen = $1 WHERE id = $2`, [now, cur.id]);
 				let cause = s.status === 0 ? (getActiveError(s.name)?.message ?? null) : null;
@@ -448,6 +478,8 @@ export interface StripItem {
 	note: string | null;
 	/** ช่วงหยุดทำงานเพราะอัปเดต (ไม่นานเกินกำหนด) */
 	upd: boolean;
+	/** ช่วงที่ระบบ status ไม่ได้บันทึก = ไม่มีข้อมูล (status = -2) */
+	gap: boolean;
 }
 export interface Incident {
 	id: number;
@@ -472,6 +504,14 @@ export interface Report {
 }
 
 const overlap = (a0: number, a1: number, b0: number, b1: number) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
+/** เหมือน overlap แต่หักช่วง "ไม่มีข้อมูล" ออก (ไม่นับเป็น up หรือ down) */
+const effOverlap = (a0: number, a1: number, b0: number, b1: number, gaps: { s: number; e: number }[]) => {
+	const lo = Math.max(a0, b0), hi = Math.min(a1, b1);
+	if (hi <= lo) return 0;
+	let o = hi - lo;
+	for (const g of gaps) o -= overlap(g.s, g.e, lo, hi);
+	return Math.max(0, o);
+};
 const cache = new Map<string, { at: number; rep: Report }>();
 
 /** หมายเหตุ: อ่านจาก DB แบบ async จึงเรียกผ่าน `await getReport(...)` */
@@ -501,9 +541,14 @@ export async function getReport(service: string, range: Range = '30d', now = Dat
 		upd: g.kind === 'update' && (g.end ?? now) - g.start <= UPDATE_MAX_MS,
 	}));
 
+	const gaps = (await pool.query<{ s: string; e: string }>(
+		`SELECT started_at AS s, ended_at AS e FROM gaps WHERE service = $1 AND ended_at > $2::bigint ORDER BY started_at`,
+		[service, from],
+	)).rows.map(r => ({ s: Number(r.s), e: Number(r.e) }));
+
 	let observed = 0, down = 0, incidents = 0, longest = 0;
 	for (const g of segs) {
-		const o = overlap(g.start, g.end, from, now);
+		const o = effOverlap(g.start, g.end, from, now, gaps);
 		if (!o) continue;
 		observed += o;
 		if (g.status === 0) { down += o; incidents++; longest = Math.max(longest, o); }
@@ -515,13 +560,18 @@ export async function getReport(service: string, range: Range = '30d', now = Dat
 		const start = from + i * size, end = start + size;
 		let ob = 0, dn = 0, up = 0;
 		for (const g of segs) {
-			const o = overlap(g.start, g.end, start, end);
+			const o = effOverlap(g.start, g.end, start, end, gaps);
 			ob += o;
 			if (g.status === 0) { if (g.upd) up += o; else dn += o; }
 		}
 		return { start, end, observed: ob, down: dn, upd: up };
 	});
 
+	const gapItems: StripItem[] = gaps.filter(g => overlap(g.s, g.e, from, now) > 0).map(g => {
+		const s = Math.max(g.s, from), e = Math.min(g.e, now);
+		const width = Math.max(((e - s) / span) * 100, 0.3);
+		return { left: Math.min(((s - from) / span) * 100, 100 - width), width, status: -2, start: g.s, end: g.e, open: false, cause: null, note: null, upd: false, gap: true };
+	});
 	const strip: StripItem[] = segs
 		.filter(g => overlap(g.start, g.end, from, now) > 0)
 		.slice(-500)
@@ -538,8 +588,9 @@ export async function getReport(service: string, range: Range = '30d', now = Dat
 				cause: g.cause,
 				note: g.note,
 				upd: g.upd,
+				gap: false,
 			};
-		});
+		}).concat(gapItems);
 
 	const incs: Incident[] = segs
 		.filter(g => g.status === 0)
