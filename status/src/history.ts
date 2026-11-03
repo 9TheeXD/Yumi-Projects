@@ -579,10 +579,10 @@ export async function getReport(service: string, range: Range = '30d', now = Dat
 /* ---------- ฟังก์ชันสำหรับหน้าแอดมิน ---------- */
 
 /** เหตุการณ์หยุดทำงานล่าสุดของทุก service (สำหรับให้แอดมินใส่สาเหตุ/หมายเหตุ) */
-export async function recentDowns(limit = 40): Promise<{ id: number; service: string; start: number; end: number | null; cause: string | null; note: string | null }[]> {
+export async function recentDowns(limit = 40): Promise<{ id: number; service: string; start: number; end: number | null; cause: string | null; note: string | null; kind: string | null }[]> {
 	await initHistory();
 	const rows = (await pool.query<SegRow & { service: string }>(
-		`SELECT id, service, status, started_at, ended_at, last_seen, cause, note
+		`SELECT id, service, status, started_at, ended_at, last_seen, cause, note, kind
 		 FROM segments WHERE status = 0 ORDER BY started_at DESC LIMIT $1`,
 		[limit],
 	)).rows;
@@ -593,22 +593,23 @@ export async function recentDowns(limit = 40): Promise<{ id: number; service: st
 		end: r.ended_at === null ? null : Number(r.ended_at),
 		cause: r.cause,
 		note: r.note,
+		kind: r.kind,
 	}));
 }
 
 /** แก้สาเหตุ/หมายเหตุของช่วงหยุดทำงาน 1 ครั้ง */
-export async function setSegmentNote(id: number, cause: string | null, note: string | null): Promise<boolean> {
+export async function setSegmentNote(id: number, cause: string | null, note: string | null, kind: 'update' | null = null): Promise<boolean> {
 	await initHistory();
-	const r = await pool.query(`UPDATE segments SET cause = $2, note = $3, note_at = $4 WHERE id = $1`, [id, cause, note, Date.now()]);
+	const r = await pool.query(`UPDATE segments SET cause = $2, note = $3, kind = $5, note_at = $4 WHERE id = $1`, [id, cause, note, Date.now(), kind]);
 	cache.clear();
 	return (r.rowCount ?? 0) > 0;
 }
 
 /** ช่วงหยุดทำงาน 1 รายการ (สำหรับหน้าแก้ไขของแอดมิน) */
-export async function getSegment(id: number): Promise<{ id: number; service: string; start: number; end: number | null; cause: string | null; note: string | null } | null> {
+export async function getSegment(id: number): Promise<{ id: number; service: string; start: number; end: number | null; cause: string | null; note: string | null; kind: string | null } | null> {
 	await initHistory();
 	const r = (await pool.query<SegRow & { service: string }>(
-		`SELECT id, service, status, started_at, ended_at, last_seen, cause, note FROM segments WHERE id = $1 AND status = 0`,
+		`SELECT id, service, status, started_at, ended_at, last_seen, cause, note, kind FROM segments WHERE id = $1 AND status = 0`,
 		[id],
 	)).rows[0];
 	if (!r) return null;
@@ -619,5 +620,6 @@ export async function getSegment(id: number): Promise<{ id: number; service: str
 		end: r.ended_at === null ? null : Number(r.ended_at),
 		cause: r.cause,
 		note: r.note,
+		kind: r.kind,
 	};
 }

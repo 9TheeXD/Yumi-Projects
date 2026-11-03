@@ -372,7 +372,7 @@ async function dashboard(csrf: string, ok: string, q: string, statuses: StatusDa
 			<td>${fmtDateTh(d.start)}</td>
 			<td>${d.end ? fmtDateTh(d.end) : '<span class="pill down">กำลังล่ม</span>'}</td>
 			<td>${d.end ? fmtDurTh(d.end - d.start) : '—'}</td>
-			<td class="clip">${d.cause ? esc(d.cause) : '<span class="muted">ไม่ทราบ</span>'}</td>
+			<td class="clip">${d.kind === 'update' ? '<span class="pill upd">อัปเดต</span> ' : ''}${d.cause ? esc(d.cause) : '<span class="muted">ไม่ทราบ</span>'}</td>
 			<td class="clip muted">${d.note ? esc(d.note) : '—'}</td>
 			<td><a class="btn ghost icon" href="/admin/incident/${d.id}" title="แก้ไข" aria-label="แก้ไข">${ic('pencil')}</a></td>
 		</tr>`).join('')
@@ -473,6 +473,11 @@ async function incidentPage(csrf: string, id: number): Promise<string | null> {
 				<div><div class="k">ระยะเวลา</div><div class="v" style="font-size:.95rem">${d.end ? fmtDurTh(d.end - d.start) : '—'}</div></div>
 			</div>
 			<form method="post" action="/admin/incident/${d.id}">${hidden}
+				<label for="kind">ประเภท</label>
+				<select id="kind" name="kind">
+					<option value="" ${d.kind === 'update' ? '' : 'selected'}>หยุดทำงาน (ล่ม)</option>
+					<option value="update" ${d.kind === 'update' ? 'selected' : ''}>อัปเดต (สีเขียวเข้ม ไม่ถือว่าล่ม แต่ยังนับเป็น downtime)</option>
+				</select>
 				<label for="cause">สาเหตุ</label>
 				<input id="cause" name="cause" maxlength="300" value="${esc(d.cause ?? '')}" placeholder="เช่น หมดเวลารอการตอบกลับระหว่างโหลดหน้าเว็บ">
 				<label for="note">หมายเหตุ (แสดงในไทม์ไลน์ของหน้ารายละเอียด)</label>
@@ -613,7 +618,7 @@ export function registerAdmin(app: Express, getStatuses: () => StatusData[]) {
 		if (!Number.isSafeInteger(id) || id <= 0) return res.redirect(303, '/admin?ok=bad');
 		const cause = String(req.body?.cause ?? '').trim().slice(0, 300) || null;
 		const note = String(req.body?.note ?? '').trim().slice(0, 1000) || null;
-		await setSegmentNote(id, cause, note);
+		await setSegmentNote(id, cause, note, req.body?.kind === 'update' ? 'update' : null);
 		await audit(req, `แก้ไขสาเหตุเหตุการณ์ #${id}`);
 		res.redirect(303, '/admin?ok=incident');
 	});
