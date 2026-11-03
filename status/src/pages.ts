@@ -1,6 +1,6 @@
 import type { StatusData } from 'global/types';
 import { formatDataSize } from 'global/common-functions';
-import { RANGE_LIST, type Banner, type Brief, type Range, type Report, type SeriesPoint } from './history.js';
+import { RANGE_LIST, type Banner, type Brief, type Range, type Report, type SeriesPoint, type TimelineItem } from './history.js';
 import { COLORS, UI_BODY, UI_CSS, UI_SCRIPT, seriesLine, svgChart } from './chart.js';
 import { displayName, fmtDateTh, fmtDayTh, fmtDurTh, fmtPct, stateTh } from './format.js';
 import { localeOf, prefs, t, tMany, tzLabel } from './i18n.js';
@@ -129,6 +129,21 @@ a{color:inherit;text-decoration:none}button{font:inherit}
 .axis{display:flex;justify-content:space-between;margin-top:8px;color:var(--dim);font-size:.8rem;font-weight:300}
 .spark svg{display:block;width:100%;height:140px}
 .stats{display:flex;flex-wrap:wrap;gap:6px 28px;margin-top:14px;color:var(--muted);font-weight:300;font-size:.9rem}.stats b{color:var(--ink);font-weight:600}
+.tl{max-height:480px;overflow-y:auto;position:relative;padding:4px 10px 4px 4px;margin:0 -4px}
+.tl::-webkit-scrollbar{width:8px}.tl::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:8px}
+.tl-it{position:relative;display:grid;grid-template-columns:22px 1fr;gap:0 12px;padding:0 0 18px}
+.tl-it::before{content:"";position:absolute;left:10px;top:20px;bottom:-2px;width:2px;background:rgba(255,255,255,.1)}
+.tl-it:last-child::before{display:none}
+.tl-dot{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 22%,transparent);border:2px solid var(--c);margin-top:1px}
+.tl-dot::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--c)}
+.tl-it.live .tl-dot::after{animation:ping 2s ease-out infinite}
+.tl-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
+.tl-t{font-weight:600;color:var(--c)}.tl-d{margin-left:auto;font-weight:600;font-variant-numeric:tabular-nums}
+.tl-w{color:var(--muted);font-weight:300;font-size:.88rem;margin-top:2px}
+.tl-c{margin-top:6px;font-size:.9rem;padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.04);border-left:3px solid var(--c)}
+.tl-n{margin-top:4px;color:var(--muted);font-size:.86rem;font-weight:300}
+.tl-it.k-up{--c:var(--ok)}.tl-it.k-down{--c:var(--down)}.tl-it.k-warn{--c:#ff9f43}.tl-it.k-upd,.tl-it.k-updated{--c:var(--upd)}.tl-it.k-load{--c:var(--load)}.tl-it.k-gap{--c:#8a7f7f}
+.tl-leg{display:flex;flex-wrap:wrap;gap:6px 16px;margin:-6px 0 14px;color:var(--muted);font-size:.8rem}.tl-leg i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:var(--c)}
 .inc{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 16px;padding:14px 0}.inc+.inc{border-top:1px solid rgba(255,255,255,.07)}
 .inc .w{color:var(--muted);font-weight:300;font-size:.92rem}.inc .d{font-weight:600;font-variant-numeric:tabular-nums}.inc .d.on{color:var(--down)}
 .none{color:var(--muted);font-weight:300}
@@ -322,7 +337,25 @@ export const segTip = (g: Report['strip'][number], label: string, k: string) => 
 	return lines.join('');
 };
 
-export function renderDetail(s: StatusData, r: Report, b: Brief, limitedUntil: number, range: Range, series: SeriesPoint[] = [], ctx: PageCtx = { banner: null, maint: {} }): string {
+/** ไทม์ไลน์เหตุการณ์แบบเส้นเวลาแนวตั้ง (สูงจำกัด เลื่อนดูได้) */
+export function renderTimeline(items: TimelineItem[]): string {
+	const label = (k: TimelineItem['kind']) => ({ up: t('state_ok'), down: t('tl_down_long'), warn: t('tl_down_short'), upd: t('state_upd'), updated: t('tl_updated'), load: t('state_load'), gap: t('no_data') }[k]);
+	const legend = (['up', 'warn', 'down', 'upd', 'updated'] as const).map(k => `<span class="tl-it k-${k}" style="padding:0;display:inline-block"><i></i>${label(k)}</span>`).join('');
+	const list = items.length ? items.map(i => {
+		const live = i.end === null;
+		const when = live ? t('seg_since', { t: fmtDateTh(i.start) }) : t('from_to', { a: fmtDateTh(i.start), b: fmtDateTh(i.end!) });
+		const dur = live ? `<span data-since="${i.start}">${fmtDurTh(i.duration)}</span>` : fmtDurTh(i.duration);
+		const down = i.kind === 'down' || i.kind === 'warn' || i.kind === 'upd' || i.kind === 'updated';
+		const cause = down ? `<div class="tl-c">${t('seg_cause', { c: i.cause ? esc(i.cause) : t('unknown_cause') })}</div>` : '';
+		const note = i.note ? `<div class="tl-n">${t('seg_note', { n: esc(i.note) })}</div>` : '';
+		return `<div class="tl-it k-${i.kind}${live ? ' live' : ''}"><span class="tl-dot"></span><div>
+	<div class="tl-h"><span class="tl-t">${label(i.kind)}</span>${live ? `<span class="tl-w">${t('now')}</span>` : ''}<span class="tl-d">${dur}</span></div>
+	<div class="tl-w">${when}</div>${cause}${note}</div></div>`;
+	}).join('') : `<div class="none">${t('tl_empty')}</div>`;
+	return `<section class="panel glass"><h2>${t('tl_title')}</h2><div class="tl-leg">${legend}</div><div class="tl">${list}</div></section>`;
+}
+
+export function renderDetail(s: StatusData, r: Report, b: Brief, limitedUntil: number, range: Range, series: SeriesPoint[] = [], ctx: PageCtx = { banner: null, maint: {} }, timeline: TimelineItem[] = []): string {
 	const now = Date.now();
 	const st = b.upd ? { key: 'upd', label: t('state_upd') } : stateTh(s.status);
 	const limited = limitedUntil > now;
@@ -389,7 +422,7 @@ ${ctx.banner ? `<div class="banner ${ctx.banner.level}">${esc(ctx.banner.text)}<
 	<div class="axis"><span>${fmtDateTh(r.from)}</span><span>${fmtDateTh(r.from + span / 2)}</span><span>${t('now')}</span></div></section>
 <section class="panel glass"><h2>${t('ping_title')}</h2>${svgChart([seriesLine(series, 'ping', 'Ping', COLORS[2])], ' ms')}</section>
 ${resourcePanels(series)}
-<section class="panel glass"><h2>${t('down_history')}</h2>${incidents}</section>
+${renderTimeline(timeline)}
 ${pageLinks(range)}`;
 
 	return shell(t('detail_title', { n: esc(displayName(s.name)) }), backBtn() + brand, main, st.key);

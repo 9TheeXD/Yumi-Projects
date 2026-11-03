@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { send } from './send.js';
 import { checkAll as _checkAll, getRateLimits } from './check.js';
-import { recordStatus, getReport, getBrief, getSeries, firstSampleTs, getBanner, getMaintenance, parseRange, initHistory } from './history.js';
+import { recordStatus, getReport, getBrief, getSeries, firstSampleTs, getTimeline, getBanner, getMaintenance, parseRange, initHistory } from './history.js';
 import { renderIndex, renderDetail, renderNotFound } from './pages.js';
 import { confirmSubscribe, unsubscribe, initSubscribers } from './subscribers.js';
 import { initAccounts, logout, mergePrefs, requestCode, saveUserPrefs, SESSION_DAYS, setSubscribed, userBySession, verifyCode, type User } from './accounts.js';
@@ -283,8 +283,8 @@ app.get('/nodes/:node', wrap(async (req, res) => {
 	const n = getMusic()?.nodes.find(x => x.name.toLowerCase() === String(req.params.node).toLowerCase());
 	if (!n) { res.status(getMusic() ? 404 : 503).send(renderNotFound(String(req.params.node))); return; }
 	const s = nodeStatusData(n);
-	const [r, b, series, ctx] = await Promise.all([getReport(s.name, range), getBrief(s), getSeries(s.name, range), pageCtx()]);
-	res.status(n.up ? 200 : 503).send(renderMusicNode(n, r, b, range, series, ctx));
+	const [r, b, series, ctx, tl] = await Promise.all([getReport(s.name, range), getBrief(s), getSeries(s.name, range), pageCtx(), getTimeline(s.name)]);
+	res.status(n.up ? 200 : 503).send(renderMusicNode(n, r, b, range, series, ctx, tl));
 }));
 
 // ต้องอยู่หลัง /metrics และ /api/* เพื่อไม่ให้ถูกจับเป็นชื่อ service
@@ -292,8 +292,8 @@ app.get(`/:name`, wrap(async (req, res) => {
 	const range = parseRange(req.query.range);
 	const status = allS.find(s => s.name === req.params.name);
 	if (!status) { res.status(404).send(renderNotFound(req.params.name)); return; }
-	const [r, b, series, ctx] = await Promise.all([getReport(status.name, range), getBrief(status), getSeries(status.name, range), pageCtx()]);
-	res.status(status.status === 1 ? 200 : 503).send(renderDetail(status, r, b, getRateLimits()[status.name] ?? 0, range, series, ctx));
+	const [r, b, series, ctx, tl] = await Promise.all([getReport(status.name, range), getBrief(status), getSeries(status.name, range), pageCtx(), getTimeline(status.name)]);
+	res.status(status.status === 1 ? 200 : 503).send(renderDetail(status, r, b, getRateLimits()[status.name] ?? 0, range, series, ctx, tl));
 }));
 
 // เริ่มเฝ้าดูหลังเชื่อมต่อ DB สำเร็จ เพื่อไม่ให้บันทึกประวัติหาย

@@ -627,6 +627,45 @@ export async function getReport(service: string, range: Range = '30d', now = Dat
 	return rep;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Timeline: เหตุการณ์ละเอียดของ service ใน 30 วันล่าสุด (ใหม่สุดก่อน)    */
+/* ------------------------------------------------------------------ */
+export type TimelineKind = 'up' | 'down' | 'warn' | 'upd' | 'updated' | 'load' | 'gap';
+export interface TimelineItem {
+	kind: TimelineKind;
+	start: number;
+	/** null = ยังดำเนินอยู่ */
+	end: number | null;
+	duration: number;
+	cause: string | null;
+	note: string | null;
+}
+const TIMELINE_DAYS = 30;
+const TIMELINE_MAX = 400;
+
+export async function getTimeline(service: string, now = Date.now()): Promise<TimelineItem[]> {
+	await initHistory();
+	const from = now - TIMELINE_DAYS * DAY;
+	const segs = (await pool.query<SegRow>(
+		`SELECT ${SEG_COLS} FROM segments WHERE service = $1 AND (ended_at IS NULL OR ended_at > $2::bigint) ORDER BY started_at`,
+		[service, from])).rows.map(toSeg);
+	const gaps = (await pool.query<{ s: string; e: string }>(
+		`SELECT started_at AS s, ended_at AS e FROM gaps WHERE service = $1 AND ended_at > $2::bigint`, [service, from])).rows;
+	const items: TimelineItem[] = segs.map(g => {
+		const end = g.end;
+		const dur = (end ?? now) - g.start;
+		let kind: TimelineKind;
+		if (g.status === 1) kind = 'up';
+		else if (g.status === -1) kind = 'load';
+		// อัปเดตที่ไม่นานเกินกำหนด: กำลังอัปเดต (เขียวเข้ม) / อัปเดตแล้ว (เขียวเข้ม) นานเกิน: แดงเหมือนล่มจริง
+		else if (g.kind === 'update' && dur <= UPDATE_MAX_MS) kind = end === null ? 'upd' : 'updated';
+		else kind = dur < 5 * 60_000 ? 'warn' : 'down';
+		return { kind, start: g.start, end, duration: dur, cause: g.status === 0 ? g.cause : null, note: g.note };
+	});
+	for (const x of gaps) items.push({ kind: 'gap', start: Number(x.s), end: Number(x.e), duration: Number(x.e) - Number(x.s), cause: null, note: null });
+	return items.sort((a, b) => b.start - a.start).slice(0, TIMELINE_MAX);
+}
+
 /* ---------- ฟังก์ชันสำหรับหน้าแอดมิน ---------- */
 
 /** เหตุการณ์หยุดทำงานล่าสุดของทุก service (สำหรับให้แอดมินใส่สาเหตุ/หมายเหตุ) */

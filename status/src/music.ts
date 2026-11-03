@@ -1,10 +1,10 @@
 import axios from 'axios';
 import type { StatusData } from 'global/types';
 import { formatDataSize } from 'global/common-functions';
-import type { Brief, Range, Report, SampleStatus, SeriesPoint } from './history.js';
+import type { Brief, Range, Report, SampleStatus, SeriesPoint, TimelineItem } from './history.js';
 import { COLORS, seriesLine, svgChart } from './chart.js';
 import { fmtDateTh, fmtDayTh, fmtDurTh, fmtPct } from './format.js';
-import { ICON, RANGE_LONG, backBtn, brand, esc, lastLine, pageLinks, rangeBar, resourcePanels, segTip, shell, type PageCtx } from './pages.js';
+import { ICON, RANGE_LONG, backBtn, brand, esc, lastLine, pageLinks, rangeBar, renderTimeline, resourcePanels, segTip, shell, type PageCtx } from './pages.js';
 import { t, type Key } from './i18n.js';
 import { STRINGS } from './strings.js';
 import { HOST_MEM, cpuOfHost, memOfHost } from './host.js';
@@ -222,7 +222,7 @@ ${s ? '' : ''}`;
 }
 
 /** หน้ารายละเอียด /nodes/:node */
-export function renderMusicNode(n: MusicNode, r: Report, b: Brief, range: Range, series: SeriesPoint[], ctx: PageCtx): string {
+export function renderMusicNode(n: MusicNode, r: Report, b: Brief, range: Range, series: SeriesPoint[], ctx: PageCtx, timeline: TimelineItem[] = []): string {
 	const now = Date.now();
 	const k = nodeState(n);
 	const stKey = k === 'ok' ? 'ok' : k === 'down' ? 'down' : 'load';
@@ -302,7 +302,7 @@ ${!n.up ? `<div class="warnbox">${t('node_moved')}</div>` : ''}
 <section class="panel glass"><h2>${t('ping_title')}</h2>${svgChart([seriesLine(series, 'ping', 'Ping', COLORS[2])], ' ms')}</section>
 ${resourcePanels(series)}
 ${series.some(p => p.netIn !== null || p.netOut !== null) ? `<section class="panel glass"><h2>${t('net_chart')}</h2>${svgChart([seriesLine(series, 'netIn', t('net_in'), COLORS[2]), seriesLine(series, 'netOut', t('net_out'), COLORS[3])], ' kbps')}</section>` : ''}
-<section class="panel glass"><h2>${t('down_history')}</h2>${incidents}</section>
+${renderTimeline(timeline)}
 ${pageLinks(range)}`;
 
 	return shell(`Yumi - ${esc(n.name)}`, backBtn(`/nodes?range=${range}`) + brand, main, stKey);
