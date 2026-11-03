@@ -2,20 +2,26 @@ import type { StatusData } from 'global/types';
 import { formatDataSize } from 'global/common-functions';
 import { RANGE_LIST, type Banner, type Brief, type Range, type Report, type SeriesPoint } from './history.js';
 import { COLORS, UI_BODY, UI_CSS, UI_SCRIPT, seriesLine, svgChart } from './chart.js';
-import { SUB_CSS, SUB_JS, SUB_MODAL } from './subscribe-modal.js';
 import { displayName, fmtDateTh, fmtDayTh, fmtDurTh, fmtPct, stateTh } from './format.js';
+import { localeOf, prefs, t, tMany, tzLabel } from './i18n.js';
+import { SET_CSS, firstVisitScript, gearButton, settingsModal, settingsScript } from './settings-ui.js';
 
 export type Item = { s: StatusData; r: Report; b: Brief };
 /** ประกาศและโหมดปรับปรุงที่แอดมินตั้งไว้ */
 export type PageCtx = { banner: Banner | null; maint: Record<string, string> };
 
 const LOGO = 'https://assets.yumistack.net/photos/logo/yumi/001.webp';
-const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+export const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
-const RANGE_LABEL: Record<Range, string> = { '24h': '24 ชม.', '7d': '7 วัน', '30d': '1 เดือน', all: 'ทั้งหมด' };
-const RANGE_LONG: Record<Range, string> = { '24h': '24 ชั่วโมงที่ผ่านมา', '7d': '7 วันที่ผ่านมา', '30d': '30 วันที่ผ่านมา', all: 'ตลอดช่วงที่บันทึกไว้' };
+// อ่านค่าตามภาษาของคำขอนั้นทุกครั้ง (getter)
+const RANGE_LABEL: Record<Range, string> = {
+	get '24h'() { return t('range_24h'); }, get '7d'() { return t('range_7d'); }, get '30d'() { return t('range_30d'); }, get all() { return t('range_all'); },
+};
+export const RANGE_LONG: Record<Range, string> = {
+	get '24h'() { return t('rangel_24h'); }, get '7d'() { return t('rangel_7d'); }, get '30d'() { return t('rangel_30d'); }, get all() { return t('rangel_all'); },
+};
 
-const ICON = {
+export const ICON = {
 	back: '<svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>',
 	refresh: '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5"/></svg>',
 	ok: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
@@ -26,9 +32,9 @@ const ICON = {
 const NOISE = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E")`;
 
 const CSS = `
-:root{--bg:#060203;--ink:#fff3f1;--muted:#b99a97;--dim:#8a706d;--brand:#f13b3b;--ok:#3ddc97;--warn:#fbbf24;--load:#4cc9f0;--down:#ff5a5f;--c:var(--brand);color-scheme:dark}
+:root{--bg:#060203;--ink:#fff3f1;--muted:#b99a97;--dim:#8a706d;--brand:#f13b3b;--ok:#3ddc97;--warn:#fbbf24;--load:#4cc9f0;--down:#ff5a5f;--upd:#1f9d5c;--c:var(--brand);color-scheme:dark}
 *,*::before,*::after{box-sizing:border-box}
-[data-state=ok]{--c:var(--ok)}[data-state=load]{--c:var(--load)}[data-state=down]{--c:var(--down)}
+[data-state=ok]{--c:var(--ok)}[data-state=load]{--c:var(--load)}[data-state=down]{--c:var(--down)}[data-state=upd]{--c:var(--upd)}
 html{background:var(--bg)}
 body{margin:0;min-height:100vh;color:var(--ink);font-family:'Kanit',system-ui,sans-serif;
 	background:radial-gradient(1000px 600px at 12% -15%,rgba(241,59,59,.34),transparent 65%),radial-gradient(800px 600px at 105% 105%,rgba(130,0,0,.35),transparent 60%),var(--bg);
@@ -64,7 +70,7 @@ a{color:inherit;text-decoration:none}button{font:inherit}
 .hero>*{position:relative;z-index:1}
 .hl{display:flex;align-items:center;gap:20px}
 .pulse{position:relative;width:18px;height:18px;border-radius:50%;background:var(--c);box-shadow:0 0 24px var(--c);flex:none}
-[data-state=ok] .pulse::after,[data-state=load] .pulse::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--c);animation:ping 2.4s ease-out infinite}
+[data-state=ok] .pulse::after,[data-state=upd] .pulse::after,[data-state=load] .pulse::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--c);animation:ping 2.4s ease-out infinite}
 .hero h1{margin:0;font-size:clamp(1.6rem,5vw,2.5rem);font-weight:700;line-height:1.2}
 .hero p{margin:6px 0 0;color:var(--muted);font-weight:300}
 .bigpct{text-align:right}.bigpct b{display:block;font-size:2.5rem;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
@@ -84,7 +90,7 @@ a{color:inherit;text-decoration:none}button{font:inherit}
 .tag{padding:0 9px;border-radius:99px;background:rgba(251,191,36,.14);color:var(--warn);border:1px solid rgba(251,191,36,.35);font-size:.76rem}
 .bars{display:flex;gap:3px;height:36px}
 .bars i{flex:1;min-width:0;border-radius:4px;background:rgba(255,255,255,.1);transition:transform .15s,filter .15s}
-.bars i.ok{background:var(--ok);opacity:.85}.bars i.warn{background:var(--warn)}.bars i.bad{background:var(--down)}
+.bars i.ok{background:var(--ok);opacity:.85}.bars i.warn{background:var(--warn)}.bars i.upd{background:var(--upd)}.bars i.bad{background:var(--down)}
 .bars i:hover{transform:scaleY(1.15);filter:brightness(1.25)}
 .pct{text-align:right}.pct b{display:block;font-size:1.15rem;font-weight:600;font-variant-numeric:tabular-nums}.pct span{color:var(--dim);font-size:.78rem;font-weight:300}
 .legend{display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:center;margin-top:18px;color:var(--dim);font-size:.82rem;font-weight:300}
@@ -96,8 +102,8 @@ a{color:inherit;text-decoration:none}button{font:inherit}
 .dhero>*{position:relative;z-index:1}
 .beacon{position:relative;width:104px;height:104px;display:grid;place-items:center;flex:none}
 .beacon::before,.beacon::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--c);opacity:0}
-[data-state=ok] .beacon::before,[data-state=load] .beacon::before{animation:ring 2.8s ease-out infinite}
-[data-state=ok] .beacon::after,[data-state=load] .beacon::after{animation:ring 2.8s ease-out 1.4s infinite}
+[data-state=ok] .beacon::before,[data-state=upd] .beacon::before,[data-state=load] .beacon::before{animation:ring 2.8s ease-out infinite}
+[data-state=ok] .beacon::after,[data-state=upd] .beacon::after,[data-state=load] .beacon::after{animation:ring 2.8s ease-out 1.4s infinite}
 [data-state=down] .beacon::before{opacity:.45}
 .core{width:66px;height:66px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 35% 30%,color-mix(in srgb,var(--c) 70%,#fff),var(--c));box-shadow:0 0 50px color-mix(in srgb,var(--c) 55%,transparent)}
 .core svg{width:30px;height:30px;fill:none;stroke:#0c0506;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round}
@@ -134,11 +140,11 @@ a{color:inherit;text-decoration:none}button{font:inherit}
 .banner.warn{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.4);color:#fbbf24}
 .banner.danger{background:rgba(255,90,95,.12);border-color:rgba(255,90,95,.45);color:#ff9ea1}
 .tag.maint{background:rgba(76,201,240,.14);color:#8fdcf6;border-color:rgba(76,201,240,.35)}
-.strip i.warn{background:var(--warn);opacity:1;z-index:1}
+.strip i.warn{background:var(--warn);opacity:1;z-index:1}.strip i.upd{background:var(--upd);opacity:1;z-index:1}
 .strip i{cursor:pointer;transition:filter .15s}
 .strip i:hover{filter:brightness(1.35)}
 .strip i.load{background:var(--load)}
-${UI_CSS}${SUB_CSS}
+${UI_CSS}${SET_CSS}
 .foot{margin-top:28px;text-align:center;color:var(--dim);font-size:.82rem;font-weight:300}
 @media (max-width:720px){
 	.svc{grid-template-columns:1fr auto;gap:14px}.svc .bars{grid-column:1/-1;order:3}
@@ -156,22 +162,29 @@ body.embed .foot{margin-top:16px}
 `;
 
 // อัปเดตหน้าแบบเงียบ ๆ ทุก 5 วินาที (ไม่กะพริบ, คงช่วงเวลาที่เลือก) + ตัวนับเวลาเดินทุกวินาที
-const SCRIPT = `(function(){
-var app=document.getElementById('app'),upd=document.getElementById('updated'),last=Date.now();
+// ภาษาและหน่วยเวลาตามการตั้งค่าของผู้ใช้ ปิดการอัปเดตอัตโนมัติได้ในหน้าตั้งค่า
+const script = () => {
+	const p = prefs();
+	const cfg = JSON.stringify({ loc: localeOf(), refresh: p.refresh, s: tMany(['live', 'updated_ago', 'paused']) });
+	return `(function(){
+var C=${cfg},app=document.getElementById('app'),upd=document.getElementById('updated'),last=Date.now();
 var off=Number(app.getAttribute('data-now'))-Date.now();
-function fmt(ms){var t=Math.max(0,Math.floor(ms/1000)),u=[[Math.floor(t/86400),'วัน'],[Math.floor(t%86400/3600),'ชม.'],[Math.floor(t%3600/60),'นาที'],[t%60,'วิ']],p=[];for(var i=0;i<u.length;i++){if(u[i][0]>0)p.push(u[i][0]+' '+u[i][1]);}return p.slice(0,2).join(' ')||'0 วิ';}
+var U=['day','hour','minute','second'];
+function one(v,u){try{return new Intl.NumberFormat(C.loc,{style:'unit',unit:u,unitDisplay:'short'}).format(v);}catch(e){return v+' '+u;}}
+function fmt(ms){var t=Math.max(0,Math.floor(ms/1000)),v=[Math.floor(t/86400),Math.floor(t%86400/3600),Math.floor(t%3600/60),t%60],p=[];for(var i=0;i<4;i++){if(v[i]>0)p.push(one(v[i],U[i]));}return p.slice(0,2).join(' ')||one(0,'second');}
 function tick(){var n=document.querySelectorAll('[data-since]');for(var i=0;i<n.length;i++){n[i].textContent=fmt(Date.now()+off-Number(n[i].getAttribute('data-since')));}
-if(upd){var s=Math.floor((Date.now()-last)/1000);upd.textContent=s<2?'สด':'อัปเดตเมื่อ '+s+' วิ ที่แล้ว';}}
+if(upd){if(!C.refresh){upd.textContent=C.s.paused;return;}var s=Math.floor((Date.now()-last)/1000);upd.textContent=s<2?C.s.live:C.s.updated_ago.replace('{s}',s);}}
 function refresh(){if(document.hidden)return;return fetch(location.pathname+location.search,{cache:'no-store'}).then(function(r){return r.text()}).then(function(t){
 var d=new DOMParser().parseFromString(t,'text/html'),n=d.getElementById('app');if(!n)return;
 app.innerHTML=n.innerHTML;app.setAttribute('data-state',n.getAttribute('data-state')||'');off=Number(n.getAttribute('data-now'))-Date.now();document.title=d.title;last=Date.now();tick();}).catch(function(){});}
-setInterval(tick,1000);setInterval(refresh,5000);tick();
-document.addEventListener('visibilitychange',function(){if(!document.hidden)refresh();});
+setInterval(tick,1000);if(C.refresh)setInterval(refresh,5000);tick();
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&C.refresh)refresh();});
 var b=document.getElementById('reload');if(b)b.addEventListener('click',refresh);
 })();`;
+};
 
-const shell = (title: string, left: string, main: string, state: string, embed = false) => `<!doctype html>
-<html lang="th"${embed ? ' class="embed"' : ''}>
+export const shell = (title: string, left: string, main: string, state: string, embed = false) => `<!doctype html>
+<html lang="${prefs().lang}" class="${[embed ? 'embed' : '', prefs().calm ? 'calm' : ''].join(' ').trim()}">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -182,40 +195,44 @@ const shell = (title: string, left: string, main: string, state: string, embed =
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700&display=swap" rel="stylesheet" />
 <style>${CSS}</style>
+${firstVisitScript()}
 </head>
 <body${embed ? ' class="embed"' : ''}>
 <div class="wrap">
 <header class="top">
 	<div class="l">${left}</div>
-	<div class="r"><a class="btn" href="/?subscribe=1" data-sub-open title="รับการแจ้งเตือนทางอีเมล" aria-label="รับการแจ้งเตือนทางอีเมล"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7M10 19a2 2 0 0 0 4 0"/></svg></a><span class="upd" id="updated">สด</span><button class="btn" id="reload" aria-label="รีเฟรช">${ICON.refresh}</button></div>
+	<div class="r"><span class="upd" id="updated">${t('live')}</span><button class="btn" id="reload" aria-label="${t('refresh')}" title="${t('refresh')}">${ICON.refresh}</button>${gearButton()}</div>
 </header>
 <main id="app" data-state="${state}" data-now="${Date.now()}">
 ${main}
 </main>
-<p class="foot">เวลาทั้งหมดแสดงเป็นเวลาประเทศไทย (GMT+7)</p>
+<p class="foot">${esc(t('footer_tz', { tz: tzLabel() }))}</p>
 </div>
-${SUB_MODAL}
+${settingsModal(prefs().user ?? null)}
 ${UI_BODY}
-<script>${SCRIPT}</script>
-<script>${SUB_JS}</script>
-<script>${UI_SCRIPT}</script>
+<script>${script()}</script>
+<script>${settingsScript()}</script>
+<script>${UI_SCRIPT()}</script>
 </body>
 </html>`;
 
-const brand = `<div class="brand"><img src="${LOGO}" alt="" />Yumi Status</div>`;
-const backBtn = `<a class="btn" href="/" target="_top" aria-label="กลับหน้าแรก">${ICON.back}</a>`;
+export const brand = `<div class="brand"><img src="${LOGO}" alt="" />Yumi Status</div>`;
+export const backBtn = (href = '/') => `<a class="btn" href="${href}" target="_top" aria-label="${t('back_home')}" title="${t('back_home')}">${ICON.back}</a>`;
 
-const rangeBar = (base: string, range: Range) =>
-	`<nav class="seg" aria-label="ช่วงเวลา">${RANGE_LIST.map(k => `<a href="${base}?range=${k}" class="${k === range ? 'on' : ''}"${k === range ? ' aria-current="true"' : ''}>${RANGE_LABEL[k]}</a>`).join('')}</nav>`;
+export const rangeBar = (base: string, range: Range) =>
+	`<nav class="seg" aria-label="${t('range_label')}">${RANGE_LIST.map(k => `<a href="${base}?range=${k}" class="${k === range ? 'on' : ''}"${k === range ? ' aria-current="true"' : ''}>${RANGE_LABEL[k]}</a>`).join('')}</nav>`;
 
 /** ข้อความ "ครั้งล่าสุดของสถานะตรงข้าม" */
-function lastLine(b: Brief): string {
+export function lastLine(b: Brief): string {
 	if (b.state === 'loading') return '';
 	if (b.state === 'up') {
-		return b.last ? `Downtime ล่าสุด ${fmtDurTh(b.last.duration)} เมื่อ ${fmtDateTh(b.last.start)}` : 'ยังไม่เคยล่มตั้งแต่เริ่มบันทึก';
+		return b.last ? t('last_down', { d: fmtDurTh(b.last.duration), at: fmtDateTh(b.last.start) }) : t('never_down');
 	}
-	return b.last ? `Uptime ล่าสุด ${fmtDurTh(b.last.duration)} จนถึง ${fmtDateTh(b.last.end)}` : 'ยังไม่มีข้อมูล uptime ก่อนหน้า';
+	return b.last ? t('last_up', { d: fmtDurTh(b.last.duration), at: fmtDateTh(b.last.end) }) : t('no_prev_up');
 }
+
+/** ลิงก์ท้ายหน้า: กราฟรวม และรับการแจ้งเตือนทางอีเมล (มีทุกหน้า) */
+export const pageLinks = (range: Range, home = true) => `<nav class="links">${home ? `<a href="/?range=${range}">${t('link_all_status')}</a>` : ''}<a href="/metrics?range=${range}">${t('link_metrics')}</a><a class="linkbtn" href="/?subscribe=1" data-sub-open>${t('link_subscribe')}</a></nav>`;
 
 /* ------------------------------------------------------------------ */
 
@@ -224,41 +241,44 @@ export function renderIndex(items: Item[], limits: Record<string, number>, range
 	const bannerHtml = ctx.banner && !embed ? `<div class="banner ${ctx.banner.level}">${esc(ctx.banner.text)}</div>` : '';
 	const linkTarget = embed ? ' target="_blank" rel="noopener noreferrer"' : '';
 	const now = Date.now();
-	const down = items.filter(i => i.s.status === 0).length;
+	const down = items.filter(i => i.s.status === 0 && !i.b.upd).length;
+	const updating = items.filter(i => i.b.upd).length;
 	const loading = items.filter(i => i.s.status === -1).length;
 	const n = items.length;
 
 	const overall = n === 0
-		? { key: 'load', title: 'กำลังตรวจสอบบริการ…', sub: 'ผลลัพธ์จะแสดงในอีกสักครู่' }
+		? { key: 'load', title: t('ov_checking'), sub: t('ov_checking_sub') }
 		: down > 0
-			? { key: 'down', title: down === n ? 'ทุกบริการหยุดทำงาน' : `บริการหยุดทำงาน ${down} จาก ${n} รายการ`, sub: 'เรารับทราบและกำลังดำเนินการแก้ไข' }
+			? { key: 'down', title: down === n ? t('ov_all_down') : t('ov_some_down', { n: down, total: n }), sub: t('ov_down_sub') }
+			: updating > 0
+				? { key: 'upd', title: t('ov_updating'), sub: t('ov_updating_sub', { n: updating }) }
 			: loading > 0
-				? { key: 'load', title: 'บางบริการกำลังเริ่มระบบ', sub: `${loading} จาก ${n} รายการกำลังโหลด` }
-				: { key: 'ok', title: 'ทุกระบบทำงานปกติ', sub: `${n} จาก ${n} บริการตอบสนองตามปกติ` };
+				? { key: 'load', title: t('ov_loading'), sub: t('ov_loading_sub', { n: loading, total: n }) }
+				: { key: 'ok', title: t('ov_ok'), sub: t('ov_ok_sub', { n, total: n }) };
 
 	let obs = 0, dn = 0;
 	for (const { r } of items) { obs += r.stat.observed; dn += r.stat.down; }
 	const total = obs ? ((obs - dn) / obs) * 100 : null;
 
 	const rows = items.map(({ s, r, b }) => {
-		const st = stateTh(s.status);
+		const st = b.upd ? { key: 'upd', label: t('state_upd') } : stateTh(s.status);
 		const limited = (limits[s.name] ?? 0) > now;
 		const cur = b.ms !== null && b.since !== null
 			? `<span>${b.state === 'up' ? 'Uptime' : 'Downtime'} <b data-since="${b.since}">${fmtDurTh(b.ms)}</b></span>` : '';
 		const ping = typeof s.ping === 'number' && s.status === 1 ? `<span>${s.ping} ms</span>` : '';
 		const bars = r.buckets.map(k => {
-			const cls = k.observed <= 0 ? 'na' : k.down <= 0 ? 'ok' : k.down < 5 * 60_000 ? 'warn' : 'bad';
-			const tip = k.observed <= 0 ? 'ไม่มีข้อมูล' : k.down <= 0 ? 'ไม่มี downtime' : `ล่ม ${fmtDurTh(k.down)}`;
+			const cls = k.observed <= 0 ? 'na' : k.down > 0 ? (k.down < 5 * 60_000 ? 'warn' : 'bad') : k.upd > 0 ? 'upd' : 'ok';
+			const tip = k.observed <= 0 ? t('no_data') : k.down > 0 ? t('down_for', { d: fmtDurTh(k.down + k.upd) }) : k.upd > 0 ? t('upd_for', { d: fmtDurTh(k.upd) }) : t('no_downtime');
 			const sp = k.end - k.start;
 			const label = sp >= 36 * 3_600_000 ? `${fmtDayTh(k.start)} - ${fmtDayTh(k.end - 1)}` : sp >= 20 * 3_600_000 ? fmtDayTh(k.end - 1) : fmtDateTh(k.start);
 			return `<i class="${cls}" title="${label}: ${tip}"></i>`;
 		}).join('');
 		return `<a class="svc" data-state="${st.key}" translate="no" href="/${encodeURIComponent(s.name)}?range=${range}"${linkTarget}>
 	<div class="who"><span class="dot"></span><div><div class="nm">${esc(displayName(s.name))}</div>
-		<div class="meta"><span class="st">${st.label}</span>${ctx.maint[s.name] !== undefined ? '<span class="tag maint">กำลังปรับปรุง</span>' : ''}${cur}${ping}${limited ? '<span class="tag" title="คำขอมากเกินไป (429) ระบบกำลังรอแล้วลองใหม่อัตโนมัติ">ติด Rate limit</span>' : ''}</div>
+		<div class="meta"><span class="st">${st.label}</span>${ctx.maint[s.name] !== undefined ? `<span class="tag maint">${t('maint_tag')}</span>` : ''}${cur}${ping}${limited ? `<span class="tag" title="${t('rate_tip')}">${t('rate_tag')}</span>` : ''}</div>
 		<div class="last">${lastLine(b)}</div></div></div>
 	<div class="bars">${bars}</div>
-	<div class="pct"><b>${fmtPct(r.stat.pct)}</b><span>uptime</span></div>
+	<div class="pct"><b>${fmtPct(r.stat.pct)}</b><span>${t('uptime_word')}</span></div>
 </a>`;
 	}).join('\n');
 
@@ -266,44 +286,45 @@ export function renderIndex(items: Item[], limits: Record<string, number>, range
 ${bannerHtml}
 <section class="hero glass">
 	<div class="hl"><span class="pulse"></span><div><h1>${overall.title}</h1><p>${overall.sub}</p></div></div>
-	<div class="bigpct"><b>${fmtPct(total)}</b><span>uptime ${RANGE_LONG[range]}</span></div>
+	<div class="bigpct"><b>${fmtPct(total)}</b><span>${t('uptime_in', { range: RANGE_LONG[range] })}</span></div>
 </section>
-<div class="toolbar"><h2 class="tt">บริการทั้งหมด</h2>${rangeBar(base, range)}</div>
+<div class="toolbar"><h2 class="tt">${t('all_services')}</h2>${rangeBar(base, range)}</div>
 ${n ? `<section class="list glass">${rows}</section>` : ''}
 <div class="legend">
-	<span><i style="background:var(--ok)"></i>ไม่มี downtime</span>
-	<span><i style="background:var(--warn)"></i>ล่มน้อยกว่า 5 นาที</span>
-	<span><i style="background:var(--down)"></i>ล่มนานกว่านั้น</span>
-	<span><i style="background:rgba(255,255,255,.12)"></i>ไม่มีข้อมูล</span>
+	<span><i style="background:var(--ok)"></i>${t('legend_ok')}</span>
+	<span><i style="background:var(--upd)"></i>${t('legend_upd')}</span>
+	<span><i style="background:var(--warn)"></i>${t('legend_warn')}</span>
+	<span><i style="background:var(--down)"></i>${t('legend_bad')}</span>
+	<span><i style="background:rgba(255,255,255,.12)"></i>${t('no_data')}</span>
 </div>
-${embed ? '' : `<nav class="links"><a href="/metrics?range=${range}">กราฟ CPU / RAM / Ping</a><a class="linkbtn" href="/?subscribe=1" data-sub-open>รับการแจ้งเตือนทางอีเมล</a></nav>`}`;
-	return shell('Yumi - สถานะระบบ', embed ? '' : brand, main, overall.key, embed);
+${embed ? '' : pageLinks(range, false)}`;
+	return shell(t('site_title'), embed ? '' : brand, main, overall.key, embed);
 }
 
 /** กราฟ CPU และ RAM ของบริการ (แสดงเฉพาะบริการที่ส่งค่าเหล่านี้มา) */
-const resourcePanels = (series: SeriesPoint[]) => {
+export const resourcePanels = (series: SeriesPoint[]) => {
 	if (!series.some(p => p.cpu !== null || p.memMb !== null)) return '';
-	return `<section class="panel glass"><h2>CPU (%)</h2>${svgChart([seriesLine(series, 'cpu', 'CPU', COLORS[0])], '%')}</section>
-<section class="panel glass"><h2>หน่วยความจำ RAM (MB)</h2>${svgChart([seriesLine(series, 'memMb', 'RAM', COLORS[2])], ' MB')}</section>`;
+	return `<section class="panel glass"><h2>${t('cpu_chart')}</h2>${svgChart([seriesLine(series, 'cpu', 'CPU', COLORS[0])], '%')}</section>
+<section class="panel glass"><h2>${t('ram_chart')}</h2>${svgChart([seriesLine(series, 'memMb', 'RAM', COLORS[2])], ' MB')}</section>`;
 };
 
 /** รายละเอียดของแต่ละช่วงในไทม์ไลน์: สี เวลา ระยะเวลา สาเหตุ และหมายเหตุ */
-const segTip = (g: Report['strip'][number], label: string, k: string) => {
-	const col = k === 'down' ? '#ff5a5f' : k === 'warn' ? '#fbbf24' : k === 'load' ? '#4cc9f0' : '#3ddc97';
+export const segTip = (g: Report['strip'][number], label: string, k: string) => {
+	const col = k === 'down' ? '#ff5a5f' : k === 'warn' ? '#fbbf24' : k === 'upd' ? '#1f9d5c' : k === 'load' ? '#4cc9f0' : '#3ddc97';
 	const lines = [
-		`<div style="color:${col};font-weight:600">● ${esc(label)}${k === 'warn' ? ' (ล่มสั้น)' : ''}</div>`,
-		`<div>ตั้งแต่ ${fmtDateTh(g.start)}</div>`,
-		`<div>ถึง ${g.open ? 'ตอนนี้' : fmtDateTh(g.end)}</div>`,
-		`<div>ระยะเวลา ${fmtDurTh(g.end - g.start)}</div>`,
+		`<div style="color:${col};font-weight:600">● ${esc(label)}${k === 'warn' ? ` ${t('seg_short')}` : ''}</div>`,
+		`<div>${t('seg_since', { t: fmtDateTh(g.start) })}</div>`,
+		`<div>${t('seg_until', { t: g.open ? t('now') : fmtDateTh(g.end) })}</div>`,
+		`<div>${t('seg_dur', { d: fmtDurTh(g.end - g.start) })}</div>`,
 	];
-	if (g.status === 0) lines.push(`<div style="color:#ff9ea1">สาเหตุ: ${g.cause ? esc(g.cause) : 'ไม่ทราบสาเหตุ'}</div>`);
-	if (g.note) lines.push(`<div style="color:#b99a97">หมายเหตุ: ${esc(g.note)}</div>`);
+	if (g.status === 0) lines.push(`<div style="color:${g.upd ? '#5fd99a' : '#ff9ea1'}">${t('seg_cause', { c: g.cause ? esc(g.cause) : t('unknown_cause') })}</div>`);
+	if (g.note) lines.push(`<div style="color:#b99a97">${t('seg_note', { n: esc(g.note) })}</div>`);
 	return lines.join('');
 };
 
 export function renderDetail(s: StatusData, r: Report, b: Brief, limitedUntil: number, range: Range, series: SeriesPoint[] = [], ctx: PageCtx = { banner: null, maint: {} }): string {
 	const now = Date.now();
-	const st = stateTh(s.status);
+	const st = b.upd ? { key: 'upd', label: t('state_upd') } : stateTh(s.status);
 	const limited = limitedUntil > now;
 	const base = `/${encodeURIComponent(s.name)}`;
 
@@ -315,67 +336,68 @@ export function renderDetail(s: StatusData, r: Report, b: Brief, limitedUntil: n
 	const cpu = s.resources?.cpu?.percent;
 	const mem = s.resources?.memory;
 	const tiles = `
-	<div class="tile glass"><div class="k">Ping</div>${na(typeof s.ping === 'number' ? `${s.ping} ms` : null)}</div>
-	<div class="tile glass"><div class="k">เวอร์ชัน</div>${na(s.version ? `v${s.version}` : null)}</div>
-	${cpu !== undefined ? `<div class="tile glass"><div class="k">การใช้ CPU</div><div class="v">${cpu}%</div><div class="meter"><i style="width:${Math.min(100, Number(cpu))}%"></i></div></div>` : ''}
-	${mem ? `<div class="tile glass"><div class="k">การใช้หน่วยความจำ</div><div class="v">${esc(formatDataSize('byte', mem.used, 'short'))} / ${esc(formatDataSize('byte', mem.total, 'short'))}</div><div class="meter"><i style="width:${Math.min(100, Number(mem.percent))}%"></i></div></div>` : ''}`;
+	<div class="tile glass"><div class="k">${t('tile_ping')}</div>${na(typeof s.ping === 'number' ? `${s.ping} ms` : null)}</div>
+	<div class="tile glass"><div class="k">${t('tile_version')}</div>${na(s.version ? `v${s.version}` : null)}</div>
+	${cpu !== undefined ? `<div class="tile glass"><div class="k">${t('tile_cpu')}</div><div class="v">${cpu}%</div><div class="meter"><i style="width:${Math.min(100, Number(cpu))}%"></i></div></div>` : ''}
+	${mem ? `<div class="tile glass"><div class="k">${t('tile_mem')}</div><div class="v">${esc(formatDataSize('byte', mem.used, 'short'))} / ${esc(formatDataSize('byte', mem.total, 'short'))}</div><div class="meter"><i style="width:${Math.min(100, Number(mem.percent))}%"></i></div></div>` : ''}`;
 
 	const stt = r.stat;
 	const avail = `
-	<div><div class="k">Uptime</div><b>${fmtPct(stt.pct)}</b><small>${stt.observed ? `จากข้อมูล ${fmtDurTh(stt.observed)}` : 'ยังไม่มีข้อมูล'}</small></div>
-	<div><div class="k">Downtime รวม</div><b>${stt.down ? fmtDurTh(stt.down) : 'ไม่มี'}</b><small>${stt.down ? 'เวลาที่ล่มสะสม' : 'ไม่เคยล่มในช่วงนี้'}</small></div>
-	<div><div class="k">จำนวนครั้งที่ล่ม</div><b>${stt.incidents} ครั้ง</b><small>นับทุกช่วงที่หยุดทำงาน</small></div>
-	<div><div class="k">ล่มนานที่สุด</div><b>${stt.longest ? fmtDurTh(stt.longest) : 'ไม่มี'}</b><small>ต่อเนื่องครั้งเดียว</small></div>`;
+	<div><div class="k">Uptime</div><b>${fmtPct(stt.pct)}</b><small>${stt.observed ? t('av_from', { d: fmtDurTh(stt.observed) }) : t('av_none')}</small></div>
+	<div><div class="k">${t('av_down_total')}</div><b>${stt.down ? fmtDurTh(stt.down) : t('av_none_short')}</b><small>${stt.down ? t('av_down_acc') : t('av_never')}</small></div>
+	<div><div class="k">${t('av_count')}</div><b>${t('av_times', { n: stt.incidents })}</b><small>${t('av_count_note')}</small></div>
+	<div><div class="k">${t('av_longest')}</div><b>${stt.longest ? fmtDurTh(stt.longest) : t('av_none_short')}</b><small>${t('av_longest_note')}</small></div>`;
 
 	const span = now - r.from;
 	const strip = r.strip.map(g => {
-		const k = g.status === 1 ? 'ok' : g.status === 0 ? (g.end - g.start < 5 * 60_000 ? 'warn' : 'down') : 'load';
-		const label = g.status === 1 ? 'กำลังทำงาน' : g.status === 0 ? 'หยุดทำงาน' : 'กำลังเริ่มระบบ';
+		const k = g.status === 1 ? 'ok' : g.status === 0 ? (g.upd ? 'upd' : g.end - g.start < 5 * 60_000 ? 'warn' : 'down') : 'load';
+		const label = g.status === 1 ? t('state_ok') : g.status === 0 ? (g.upd ? t('state_upd') : t('state_down')) : t('state_load');
 		return `<i class="${k}" style="left:${g.left.toFixed(3)}%;width:${g.width.toFixed(3)}%" data-tip="${esc(segTip(g, label, k))}"></i>`;
 	}).join('');
 
-	let spark = '<div class="none">ยังมีข้อมูลไม่พอ ระบบเก็บเวลาตอบสนองทุก 60 วินาที</div>';
+	let spark = `<div class="none">${t('ping_wait')}</div>`;
 	if (r.pings.length >= 2 && r.pingStats) {
 		const vals = r.pings.map(p => p.ping);
 		const min = Math.min(...vals), max = Math.max(...vals), sp = max - min || 1, pspan = now - r.pingFrom || 1;
 		const pts = r.pings.map(p => [((p.ts - r.pingFrom) / pspan) * 600, 125 - ((p.ping - min) / sp) * 105] as const);
 		const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
 		const area = `${line} L${pts[pts.length - 1][0].toFixed(1)} 140 L${pts[0][0].toFixed(1)} 140 Z`;
-		spark = `<svg viewBox="0 0 600 140" preserveAspectRatio="none" role="img" aria-label="เวลาตอบสนอง ${RANGE_LONG[range]}">
+		spark = `<svg viewBox="0 0 600 140" preserveAspectRatio="none" role="img" aria-label="${t('ping_title')} ${RANGE_LONG[range]}">
 	<defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f13b3b" stop-opacity=".45"/><stop offset="1" stop-color="#f13b3b" stop-opacity="0"/></linearGradient></defs>
 	<path d="${area}" fill="url(#sg)"/><path d="${line}" fill="none" stroke="#ff7a6e" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>
-	<div class="stats"><span>ต่ำสุด <b>${r.pingStats.min} ms</b></span><span>เฉลี่ย <b>${r.pingStats.avg} ms</b></span><span>สูงสุด <b>${r.pingStats.max} ms</b></span></div>`;
+	<div class="stats"><span>${t('min')} <b>${r.pingStats.min} ms</b></span><span>${t('avg')} <b>${r.pingStats.avg} ms</b></span><span>${t('max')} <b>${r.pingStats.max} ms</b></span></div>`;
 	}
 
 	const incidents = r.incidents.length
-		? r.incidents.map(i => `<div class="inc"><div class="w">${fmtDateTh(i.start)}${i.end ? ` ถึง ${fmtDateTh(i.end)}` : ''}</div>
-		${i.end ? `<div class="d">${fmtDurTh(i.duration)}</div>` : `<div class="d on">กำลังล่มอยู่ <span data-since="${i.start}">${fmtDurTh(now - i.start)}</span></div>`}</div>`).join('')
-		: '<div class="none">ไม่มี downtime ในช่วงที่เลือก</div>';
+		? r.incidents.map(i => `<div class="inc"><div class="w">${i.end ? t('from_to', { a: fmtDateTh(i.start), b: fmtDateTh(i.end) }) : fmtDateTh(i.start)}</div>
+		${i.end ? `<div class="d">${fmtDurTh(i.duration)}</div>` : `<div class="d on">${t('down_now')} <span data-since="${i.start}">${fmtDurTh(now - i.start)}</span></div>`}</div>`).join('')
+		: `<div class="none">${t('no_down_range')}</div>`;
 
 	const main = `
 ${ctx.banner ? `<div class="banner ${ctx.banner.level}">${esc(ctx.banner.text)}</div>` : ''}
 <section class="dhero glass">
-	<div class="beacon"><div class="core">${ICON[st.key as 'ok' | 'load' | 'down']}</div></div>
+	<div class="beacon"><div class="core">${ICON[(st.key === 'upd' ? 'ok' : st.key) as 'ok' | 'load' | 'down']}</div></div>
 	<div class="ttl"><h1 translate="no">${esc(displayName(s.name))}</h1>
-		<span class="pill">${st.label}</span>${ctx.maint[s.name] !== undefined ? `<span class="pill" style="--c:var(--load)">กำลังปรับปรุง: ${esc(ctx.maint[s.name])}</span>` : ''}${limited ? '<span class="pill" style="--c:var(--warn)">ติด Rate limit กำลังรอลองใหม่</span>' : ''}</div>
+		<span class="pill">${st.label}</span>${ctx.maint[s.name] !== undefined ? `<span class="pill" style="--c:var(--load)">${t('maint_pill', { m: esc(ctx.maint[s.name]) })}</span>` : ''}${limited ? `<span class="pill" style="--c:var(--warn)">${t('rate_pill')}</span>` : ''}</div>
 	<div class="clock">${clock}</div>
 </section>
 <section class="tiles">${tiles}</section>
-<div class="toolbar"><h2 class="tt">ข้อมูลย้อนหลัง</h2>${rangeBar(base, range)}</div>
-<section class="panel glass"><h2>ความพร้อมใช้งาน (${RANGE_LONG[range]})</h2><div class="avail">${avail}</div></section>
-<section class="panel glass"><h2>ไทม์ไลน์สถานะ</h2>
+<div class="toolbar"><h2 class="tt">${t('history')}</h2>${rangeBar(base, range)}</div>
+<section class="panel glass"><h2>${t('availability', { range: RANGE_LONG[range] })}</h2><div class="avail">${avail}</div></section>
+<section class="panel glass"><h2>${t('timeline')}</h2>
 	<div class="strip">${strip}</div>
-	<div class="axis"><span>${fmtDateTh(r.from)}</span><span>${fmtDateTh(r.from + span / 2)}</span><span>ตอนนี้</span></div></section>
-<section class="panel glass"><h2>เวลาตอบสนอง (Ping)</h2>${svgChart([seriesLine(series, 'ping', 'Ping', COLORS[2])], ' ms')}</section>
+	<div class="axis"><span>${fmtDateTh(r.from)}</span><span>${fmtDateTh(r.from + span / 2)}</span><span>${t('now')}</span></div></section>
+<section class="panel glass"><h2>${t('ping_title')}</h2>${svgChart([seriesLine(series, 'ping', 'Ping', COLORS[2])], ' ms')}</section>
 ${resourcePanels(series)}
-<section class="panel glass"><h2>ประวัติ downtime</h2>${incidents}</section>`;
+<section class="panel glass"><h2>${t('down_history')}</h2>${incidents}</section>
+${pageLinks(range)}`;
 
-	return shell(`Yumi - สถานะระบบ (${esc(displayName(s.name))})`, backBtn + brand, main, st.key);
+	return shell(t('detail_title', { n: esc(displayName(s.name)) }), backBtn() + brand, main, st.key);
 }
 
 export function renderNotFound(name: string): string {
 	const main = `<section class="dhero glass" data-state="down">
 	<div class="beacon"><div class="core">${ICON.down}</div></div>
-	<div class="ttl"><h1>ไม่พบหน้านี้</h1><span class="pill">ไม่มีบริการชื่อ “${esc(name)}”</span></div></section>`;
-	return shell('Yumi - สถานะระบบ', backBtn + brand, main, 'down');
+	<div class="ttl"><h1>${t('not_found')}</h1><span class="pill">${t('no_service', { n: esc(name) })}</span></div></section>`;
+	return shell(t('site_title'), backBtn() + brand, main, 'down');
 }

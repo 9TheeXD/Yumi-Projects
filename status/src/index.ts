@@ -37,7 +37,7 @@ async function go(argv: string) {
 	}else if(argv == 'send'){
 		console.info('go to', chalk.yellow('Send'));
 		await wait(1_000);
-		return await send();
+		return await send(true, false);
 	}else throw 'not found';
 };
 (async () => {

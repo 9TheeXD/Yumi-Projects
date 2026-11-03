@@ -3,6 +3,8 @@ import axios from "axios";
 import mysql from "mysql2/promise";
 import { sendEmailAlert } from "global/backend-functions";
 import https from "https";
+import { reasonText, refreshMusic } from "./music.js";
+import { HOST_MEM, hostResources, memOfHost } from "./host.js";
 
 const mailText = {
 	default: `สถานะการทำงานของ Yumi`,
@@ -138,8 +140,41 @@ async function guarded(key: string, fn: () => Promise<StatusData>, minIntervalMs
 /* ------------------------------------------------------------------ */
 
 export async function checkAll(send2mail: boolean = true) {
-	return Promise.all([bot_main(send2mail), backend(send2mail), frontend_main(send2mail), database(send2mail)]);
+	return Promise.all([bot_main(send2mail), backend(send2mail), frontend_main(send2mail), database(send2mail), music(send2mail)]);
 };
+
+/** node เพลงทั้งหมดรวมเป็นบริการเดียว: ทำงานถ้ามี node ทำงานอย่างน้อย 1 ตัว (รายละเอียดแต่ละ node อยู่ที่ /nodes) */
+export function music(send2mail: boolean = true): Promise<StatusData> {
+	return guarded('nodes', () => _music(send2mail), 5000);
+}
+
+async function _music(send2mail: boolean): Promise<StatusData> {
+	const m = await refreshMusic();
+	// ติดต่อ sidecar ไม่ได้ ไม่ได้แปลว่า node ล่ม: แสดงเป็น "ไม่ทราบสถานะ" แทน
+	if (!m) return { name: 'nodes', status: -1, ping: undefined, uptime: undefined, startTime: undefined, host: undefined, version: undefined, resources: undefined };
+	const up = m.nodes.filter(n => n.up);
+	if (!up.length) {
+		const why = m.nodes.map(n => `${n.name}: ${reasonText(n.errorTh)}`).join(', ');
+		return { ...failed('nodes', `node เพลงหยุดทำงานทั้งหมด (${why})`, send2mail) };
+	}
+	active.delete('nodes');
+	const pings = up.map(n => n.pingMs).filter((p): p is number => typeof p === 'number');
+	// รวมทุก node ที่ทำงานอยู่: CPU และ RAM บวกกัน (เทียบทั้งเครื่องแล้ว), ping เฉลี่ย
+	const withRes = up.filter(n => n.cpu !== null && n.mem && n.mem.used !== null);
+	const memUsed = withRes.reduce((a, n) => a + (n.mem!.used ?? 0), 0);
+	return {
+		name: 'nodes',
+		status: 1,
+		ping: pings.length ? Math.round(pings.reduce((a, b) => a + b, 0) / pings.length) : undefined,
+		uptime: undefined,
+		startTime: undefined,
+		host: undefined,
+		version: `${up.length}/${m.nodes.length} node`,
+		resources: withRes.length
+			? { cpu: { percent: Math.round(withRes.reduce((a, n) => a + (n.cpu ?? 0), 0) * 100) / 100 }, memory: { percent: memOfHost(memUsed), used: memUsed, total: HOST_MEM } }
+			: undefined,
+	};
+}
 
 export function bot_main(send2mail: boolean = true): Promise<StatusData> {
 	return guarded('bot', () => _bot_main(send2mail));
@@ -168,7 +203,7 @@ async function _bot_main(send2mail: boolean): Promise<StatusData> {
 			startTime: loadData.startTime,
 			host: loadData.host,
 			version: loadData.version,
-			resources: loadData.resources
+			resources: hostResources(loadData.resources)
 		};
 	}catch(err){
 		const rl = asRateLimit(err); if(rl) throw rl;
@@ -213,7 +248,7 @@ async function _backend(send2mail: boolean): Promise<StatusData> {
 			startTime: loadData.startTime,
 			host: loadData.host,
 			version: loadData.version,
-			resources: loadData.resources
+			resources: hostResources(loadData.resources)
 		};
 	}catch(err){
 		const rl = asRateLimit(err); if(rl) throw rl;

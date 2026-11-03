@@ -1,13 +1,14 @@
 import type { SeriesPoint, Range } from './history.js';
 import { RANGE_LIST } from './history.js';
 import { displayName, fmtDateTh } from './format.js';
+import { localeOf, prefs, t } from './i18n.js';
 
 const W = 720, H = 210, PL = 56, PR = 14, PT = 14, PB = 28;
-export const COLORS = ['#ff5a5f', '#3ddc97', '#4cc9f0', '#fbbf24'];
+export const COLORS = ['#ff5a5f', '#3ddc97', '#4cc9f0', '#fbbf24', '#b388ff'];
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
 export type Line = { name: string; color: string; points: { ts: number; v: number | null }[] };
-export type SeriesKey = 'cpu' | 'memMb' | 'ping' | 'uptimeH' | 'downPct';
+export type SeriesKey = 'cpu' | 'memMb' | 'ping' | 'uptimeH' | 'downPct' | 'netIn' | 'netOut';
 
 /** แปลงข้อมูลช่วงเวลาเป็นเส้นหนึ่งเส้น */
 export function seriesLine(points: SeriesPoint[], key: SeriesKey, name: string, color: string): Line {
@@ -41,7 +42,7 @@ export function niceRange(values: number[]): { lo: number; hi: number; step: num
 /** วาดกราฟเส้น; ช่วงที่ค่าเป็น null จะขาดเส้น; เส้นที่ไม่มีข้อมูลเลยจะไม่แสดง */
 export function svgChart(lines: Line[], unit: string): string {
 	const live = lines.filter(l => l.points.some(p => p.v !== null));
-	if (!live.length) return `<p class="empty">ยังไม่มีข้อมูลในช่วงนี้</p>`;
+	if (!live.length) return `<p class="empty">${t('chart_empty')}</p>`;
 
 	const n = live[0].points.length;
 	const ts = live[0].points.map(p => p.ts);
@@ -83,11 +84,12 @@ export function svgChart(lines: Line[], unit: string): string {
 		lines: live.map(l => ({ name: l.name, color: l.color, v: l.points.map(p => p.v) })),
 	};
 
-	const f1 = (v: number) => String(Math.round(v * 10) / 10);
+	// ค่าน้อยกว่า 1 (เช่น CPU 0.03%) แสดง 2 ตำแหน่ง ไม่ให้ปัดเป็น 0
+	const f1 = (v: number) => String(Math.abs(v) < 1 ? Math.round(v * 100) / 100 : Math.round(v * 10) / 10);
 	const legend = live.map(l => {
 		const vs = l.points.map(p => p.v).filter((v): v is number => v !== null);
 		const mn = Math.min(...vs), mx = Math.max(...vs), av = vs.reduce((a, b) => a + b, 0) / vs.length;
-		return `<span class="lg" style="color:${l.color}">● ${esc(l.name)} <em>ต่ำสุด</em> <b>${f1(mn)}${esc(unit)}</b> <em>เฉลี่ย</em> <b>${f1(av)}${esc(unit)}</b> <em>สูงสุด</em> <b>${f1(mx)}${esc(unit)}</b></span>`;
+		return `<span class="lg" style="color:${l.color}">● ${esc(l.name)} <em>${t('min')}</em> <b>${f1(mn)}${esc(unit)}</b> <em>${t('avg')}</em> <b>${f1(av)}${esc(unit)}</b> <em>${t('max')}</em> <b>${f1(mx)}${esc(unit)}</b></span>`;
 	}).join('');
 
 	return `<div class="ch" data-chart="${esc(JSON.stringify(data))}">` +
@@ -120,10 +122,11 @@ export const UI_CSS = `
 export const UI_BODY = `<div id="tip" class="tip" hidden></div>`;
 
 /** ตัวจัดการเมาส์: กราฟแสดงค่า ณ จุดที่ชี้ และองค์ประกอบที่มี data-tip แสดงรายละเอียด */
-export const UI_SCRIPT = `(function(){
+export const UI_SCRIPT = () => `(function(){
 var tip=document.getElementById('tip');
 if(!tip)return;
-var fmtT=new Intl.DateTimeFormat('th-TH',{timeZone:'Asia/Bangkok',day:'numeric',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
+var fmtT=new Intl.DateTimeFormat(${JSON.stringify(localeOf())},${JSON.stringify({ timeZone: prefs().tz, day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit', ...(prefs().h12 === null ? {} : { hour12: prefs().h12 }) })});
+var NODATA=${JSON.stringify(t('no_data'))};
 var activeCh=null,lastEl=null;
 function place(e){
 	var w=tip.offsetWidth,h=tip.offsetHeight,x=e.clientX+16,y=e.clientY+16;
@@ -139,7 +142,7 @@ function resetCh(c){
 	var dots=svg.querySelectorAll('circle.pt');
 	for(var i=0;i<dots.length;i++)dots[i].style.display='none';
 }
-function fmtVal(v){return String(Math.round(v*10)/10);}
+function fmtVal(v){return String(Math.abs(v)<1?Math.round(v*100)/100:Math.round(v*10)/10);}
 function chartAt(c,e){
 	var d=c._d||(c._d=JSON.parse(c.getAttribute('data-chart')));
 	var svg=c.querySelector('svg'),r=svg.getBoundingClientRect();
@@ -156,7 +159,7 @@ function chartAt(c,e){
 		var L=d.lines[k],v=L.v[i],dot=dots[k];
 		if(v===null||v===undefined){
 			dot.style.display='none';
-			rows+='<div><span style="color:'+L.color+'">●</span> '+L.name+': <b>ไม่มีข้อมูล</b></div>';
+			rows+='<div><span style="color:'+L.color+'">●</span> '+L.name+': <b>'+NODATA+'</b></div>';
 		}else{
 			var y=PT+(1-(v-d.lo)/(d.hi-d.lo))*(H-PT-PB);
 			dot.setAttribute('cx',x);dot.setAttribute('cy',y);dot.style.display='';
@@ -188,50 +191,18 @@ document.addEventListener('mousemove',function(e){
 
 /* ---------- หน้า /metrics ---------- */
 
-const panel = (title: string, body: string) => `<section class="panel"><h2>${esc(title)}</h2>${body}</section>`;
+const panel = (title: string, body: string) => `<section class="panel glass"><h2>${esc(title)}</h2>${body}</section>`;
 
-/** หน้ากราฟ: /metrics?range=24h|7d|30d|all  (5 กราฟ แต่ละกราฟรวมทุก process ที่มีค่านั้น แยกด้วยสี) */
-export function renderMetricsPage(data: Record<string, SeriesPoint[]>, range: Range): string {
+/** หน้ากราฟ: /metrics?range=24h|7d|30d|all  (แต่ละกราฟรวมทุก service ที่มีค่านั้น แยกด้วยสี) ใช้โครงหน้าเดียวกับหน้าอื่น */
+export async function renderMetricsPage(data: Record<string, SeriesPoint[]>, range: Range): Promise<string> {
+	const { shell, backBtn, brand, rangeBar, pageLinks } = await import('./pages.js');
 	const services = Object.keys(data);
 	const lines = (key: SeriesKey) => services.map((n, i) => seriesLine(data[n] ?? [], key, displayName(n), COLORS[i % COLORS.length]));
-
-	const panels = [
-		panel('PING (ms)', svgChart(lines('ping'), ' ms')),
-		panel('CPU (%)', svgChart(lines('cpu'), '%')),
-		panel('RAM (MB)', svgChart(lines('memMb'), ' MB')),
-	].join('\n');
-
-	const tabs = RANGE_LIST.map(r => `<a href="?range=${r}" class="${r === range ? 'on' : ''}">${r}</a>`).join('');
-
-	return `<!doctype html>
-<html lang="th"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex">
-<title>กราฟสถานะ - Yumi Status</title>
-<style>
-:root{color-scheme:dark}
-body{margin:0;padding:24px 16px;background:#060203;color:#fff3f1;font-family:'Kanit',system-ui,sans-serif}
-h1{margin:0;font-size:1.6rem}
-.top{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:18px}
-.back{padding:7px 14px;border-radius:999px;border:1px solid #432226;color:#d8b9b5;text-decoration:none;font-size:.9rem}
-.back:hover{color:#fff;border-color:#8a2c30}
-.tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
-.tabs a{padding:6px 14px;border-radius:999px;border:1px solid #432226;color:#d8b9b5;text-decoration:none;font-size:.9rem}
-.tabs a.on{background:#f13b3b;border-color:#f13b3b;color:#fff}
-.grid{display:grid;gap:16px;max-width:880px;margin:0 auto}
-.panel{background:#1a0b0d;border:1px solid #331a1d;border-radius:16px;padding:16px 18px}
-.panel h2{margin:0 0 8px;font-size:1rem;font-weight:600;color:#fff3f1}
-.legend{margin-top:6px;font-size:.85rem;color:#b99a97}
-.empty{color:#8a706d;font-size:.9rem}
-${UI_CSS}
-</style></head>
-<body>
-<div class="grid">
-<div class="top"><a class="back" href="/">← กลับหน้าสถานะ</a><h1>กราฟสถานะระบบ</h1></div>
-<nav class="tabs">${tabs}</nav>
-${panels}
-</div>
-${UI_BODY}
-<script>${UI_SCRIPT}</script>
-</body></html>`;
+	const main = `
+<div class="toolbar" style="margin-top:0"><h1 class="tt" style="font-size:1.5rem">${esc(t('metrics_title'))}</h1>${rangeBar('/metrics', range)}</div>
+${panel('PING (ms)', svgChart(lines('ping'), ' ms'))}
+${panel('CPU (%)', svgChart(lines('cpu'), '%'))}
+${panel('RAM (MB)', svgChart(lines('memMb'), ' MB'))}
+${pageLinks(range)}`;
+	return shell(`${t('metrics_title')} - Yumi Status`, backBtn() + brand, main, 'ok');
 }
