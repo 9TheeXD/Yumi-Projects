@@ -31,3 +31,4 @@ build/
 .stignore
 
 musicV1/sujv2
+musicV1/bot/players_dev.json

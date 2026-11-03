@@ -1,0 +1,110 @@
+# NodeLink (primary node) + self-hosted yt-cipher.
+# Pinned to a release commit. Do not bump without running sidecar health checks first
+# (several NodeLink releases shipped memory leaks). Upgrade = change NODELINK_REF, rebuild, watch 24h.
+#
+#   cp .env.example .env && docker compose up -d --build
+#
+# Note: NodeLink's Dockerfile runs `npm install` without a lockfile and some deps point at
+# GitHub branches, so a rebuild of the same ref can still pull newer deps. Keep the built image
+# (tag below) and only rebuild on purpose.
+services:
+  nodelink: &nodelink
+    # Base image yumi/nodelink:<NODELINK_TAG> is built from the pinned git ref (see Dockerfile.patch),
+    # then our patches (patches/apply.mjs) go on top.
+    build:
+      context: .
+      dockerfile: Dockerfile.patch
+      args:
+        BASE: yumi/nodelink:${NODELINK_TAG:-v3.9.0}
+    image: yumi/nodelink:${NODELINK_TAG:-v3.9.0}-patched
+    container_name: yumi_nodelink
+    restart: unless-stopped
+    # Hard cap so a leak restarts the container instead of starving the host.
+    mem_limit: ${NODELINK_MEM_LIMIT:-1536m}
+    ports:
+      # Loopback only: the bots run on this host. Set NODELINK_BIND=0.0.0.0 to serve other hosts.
+      - "${NODELINK_BIND:-127.0.0.1}:${NODELINK_PORT:-3000}:3000"
+    environment: &nodelink_env
+      NODELINK_SERVER_HOST: "0.0.0.0"
+      NODELINK_SERVER_PORT: "3000"
+      NODELINK_SERVER_PASSWORD: ${NODELINK_PASSWORD:?set NODELINK_PASSWORD}
+      NODELINK_LOGGING_LEVEL: ${NODELINK_LOG_LEVEL:-info}
+      NODELINK_CLUSTER_ENABLED: "true"
+      NODELINK_CLUSTER_WORKERS: ${NODELINK_WORKERS:-2}
+
+      # YouTube
+      NODELINK_SOURCES_YOUTUBE_ENABLED: ${YT_ENABLED:-true}
+      NODELINK_SOURCES_YOUTUBE_HL: "en"
+      NODELINK_SOURCES_YOUTUBE_GL: ${YT_GL:-TH}
+      # true once: NodeLink prints a device-login link in the logs. Log in with the BURNER account,
+      # copy the refresh token into YT_REFRESH_TOKENS, then set back to false.
+      NODELINK_SOURCES_YOUTUBE_GETOAUTHTOKEN: ${YT_GET_OAUTH_TOKEN:-false}
+      # JSON array, one token per burner account (2 recommended).
+      NODELINK_SOURCES_YOUTUBE_CLIENTS_SETTINGS_TV_REFRESHTOKEN: ${YT_REFRESH_TOKENS:-[""]}
+      NODELINK_SOURCES_YOUTUBE_CLIENTS_SEARCH: ${YT_CLIENTS_SEARCH:-["Android"]}
+      NODELINK_SOURCES_YOUTUBE_CLIENTS_PLAYBACK: ${YT_CLIENTS_PLAYBACK:-["VisionOs","AndroidVR","TV_DOWN","TV","TVCast","WebEmbedded","WebParentTools","Web","IOS"]}
+      # With network_mode: host use http://127.0.0.1:8001
+      NODELINK_SOURCES_YOUTUBE_CIPHER_URL: ${YT_CIPHER_URL:-http://yt-cipher:8001}
+      # YouTube-only proxies (JSON array of URLs). Empty = direct. Residential proxy goes here
+      # only while YouTube blocks hard, it bills by traffic.
+      NODELINK_SOURCES_YOUTUBE_PROXIES: ${YT_PROXIES:-[]}
+
+      # Spotify: without a client id/secret NodeLink fetches tokens from a third-party server
+      # (externalAuthUrl). Set SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET (developer.spotify.com) to use our own.
+      NODELINK_SOURCES_SPOTIFY_CLIENTID: ${SPOTIFY_CLIENT_ID:-}
+      NODELINK_SOURCES_SPOTIFY_CLIENTSECRET: ${SPOTIFY_CLIENT_SECRET:-}
+      NODELINK_SOURCES_SPOTIFY_MARKET: ${SPOTIFY_MARKET:-TH}
+      # Max tracks loaded from one playlist/album link (all sources; default 100).
+      # The bot queues at most MUSIC_PLAYLIST_MAX (500) tracks.
+      NODELINK_PLAYBACK_MAXPLAYLISTLENGTH: ${MAX_PLAYLIST_LENGTH:-500}
+
+      # Default search. The bot always sends an explicit prefix, but NodeLink also uses this list to
+      # find a playable copy of Spotify / Apple Music / Deezer tracks. YouTube Music first: it has the
+      # official upload. SoundCloud often returns covers, remixes or 30 s Go+ previews.
+      NODELINK_SEARCH_DEFAULTSOURCE: '["ytmsearch","ytsearch","soundcloud"]'
+
+      # IPv6 rotation. Needs network_mode: host (see below) and the block routed to this host.
+      # Applies to all outbound NodeLink requests, not only YouTube.
+      NODELINK_NETWORK_ROUTEPLANNER_STRATEGY: ${ROUTEPLANNER_STRATEGY:-RotateOnBan}
+      NODELINK_NETWORK_ROUTEPLANNER_IPBLOCKS: ${ROUTEPLANNER_IPBLOCKS:-[]}
+
+      # Raw PCM / stream-url endpoints. Used by sidecar to test real playback, not just search.
+      NODELINK_API_ENABLELOADSTREAMENDPOINT: "true"
+      NODELINK_API_ENABLETRACKSTREAMENDPOINT: "true"
+      NODELINK_API_METRICS_ENABLED: "true"
+      NODELINK_API_METRICS_AUTHORIZATION_PASSWORD: ${NODELINK_PASSWORD}
+    # For IPv6 rotation uncomment, remove `ports`, and set NODELINK_PORT in the bot instead.
+    # network_mode: host
+    depends_on:
+      - yt-cipher
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/version',{headers:{Authorization:process.env.NODELINK_SERVER_PASSWORD}}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Second NodeLink: same image and settings, its own burner account (YT_REFRESH_TOKENS_2).
+  # When one burner gets banned the other keeps YouTube working while a new one is logged in.
+  # Both share the yt-cipher below.
+  nodelink2:
+    <<: *nodelink
+    container_name: yumi_nodelink2
+    ports:
+      - "${NODELINK_BIND:-127.0.0.1}:${NODELINK2_PORT:-3002}:3000"
+    environment:
+      <<: *nodelink_env
+      NODELINK_SOURCES_YOUTUBE_CLIENTS_SETTINGS_TV_REFRESHTOKEN: ${YT_REFRESH_TOKENS_2:-[""]}
+
+  yt-cipher:
+    # Only published tag is `master`, so pin by digest. Update digest on purpose.
+    image: ghcr.io/kikkia/yt-cipher@${YT_CIPHER_DIGEST:-sha256:4c5ec381ff57336cfc24822d2b526a5ad7cd0171f61065a1bbc87bb736842449}
+    container_name: yumi_nodelink_cipher
+    restart: unless-stopped
+    mem_limit: ${YT_CIPHER_MEM_LIMIT:-512m}
+    environment:
+      - OVERRIDE_PLAYER_VARIANT=IAS
+    # Bound to loopback only, so no API_TOKEN needed. NodeLink reaches it by service name
+    # (bridge network) or 127.0.0.1 (host network).
+    ports:
+      - "127.0.0.1:${YT_CIPHER_PORT:-8011}:8001"

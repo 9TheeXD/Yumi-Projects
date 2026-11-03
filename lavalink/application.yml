@@ -1,0 +1,119 @@
+# Secrets and versions come from env (docker-compose.yml). Spring maps env like
+# PLUGINS_YOUTUBE_OAUTH_REFRESHTOKEN onto plugins.youtube.oauth.refreshToken.
+server:
+  port: 2333
+  address: 0.0.0.0
+  http2:
+    enabled: false
+
+lavalink:
+  plugins:
+    - dependency: "dev.lavalink.youtube:youtube-plugin:2be8e542d3f6f178e048dca565892684c2e40177"
+      snapshot: true
+  server:
+    sources:
+      # Built-in YouTube source is dead. The plugin replaces it.
+      youtube: false
+      # lavaplayer cannot play SoundCloud AAC-HLS ("Did not detect any supported formats"). NodeLink serves SoundCloud.
+      soundcloud: false
+      bandcamp: true
+      twitch: false
+      vimeo: false
+      nico: false
+      http: true
+      local: false
+    filters:
+      volume: true
+      equalizer: true
+      karaoke: true
+      timescale: true
+      tremolo: true
+      vibrato: true
+      distortion: true
+      rotation: true
+      channelMix: true
+      lowPass: true
+    # 0 disables JDA-NAS. Its native udpqueue sends no audio on this VPS (position stays 0, no error).
+    bufferDurationMs: 0
+    frameBufferDurationMs: 5000
+    opusEncodingQuality: 10
+    resamplingQuality: LOW
+    trackStuckThresholdMs: 10000
+    useSeekGhosting: true
+    youtubePlaylistLoadLimit: 6
+    playerUpdateInterval: 5
+    youtubeSearchEnabled: true
+    soundcloudSearchEnabled: false
+    gc-warnings: true
+    timeouts:
+      # yt-cipher answers can be slow on a cold player script.
+      connectTimeoutMs: 10000
+      connectionRequestTimeoutMs: 10000
+      socketTimeoutMs: 10000
+    # IPv6 rotation. Needs network_mode: host and the block routed to this host.
+    # Lavalink's route planner only applies to sources that support it (YouTube plugin does).
+    #ratelimit:
+    #  ipBlocks: ["2001:db8:1234::/48"]
+    #  strategy: "RotatingNanoSwitch" # good for /64; use "NanoSwitch" or "RotateOnBan" for /48
+    #  searchTriggersFail: true
+    #  retryLimit: -1
+
+plugins:
+  # LavaSrc: Spotify / Apple Music / Deezer. Spotify and Apple Music only give metadata;
+  # audio comes from YouTube via the providers below (ISRC first, then title search).
+  # Keys come from env (docker-compose.yml): SPOTIFY_*, DEEZER_*.
+  lavasrc:
+    providers:
+      - "ytsearch:\"%ISRC%\""
+      - "ytsearch:%QUERY%"
+    sources:
+      spotify: false
+      applemusic: true
+      deezer: false
+    spotify:
+      countryCode: "TH"
+      playlistLoadLimit: 3
+      albumLoadLimit: 3
+      resolveArtistsInSearch: false
+    applemusic:
+      countryCode: "TH"
+      playlistLoadLimit: 2
+      albumLoadLimit: 2
+    deezer:
+      formats: ["MP3_128", "MP3_64"]
+  youtube:
+    enabled: true
+    allowSearch: true
+    allowDirectVideoIds: true
+    allowDirectPlaylistIds: true
+    # Order matters: first client is tried first. TV needs OAuth to play.
+    clients:
+      - MUSIC
+      - TV
+      - ANDROID_VR
+      - WEB
+      - WEBEMBEDDED
+      - IOS
+    clientOptions:
+      MUSIC:
+        playback: false
+
+metrics:
+  prometheus:
+    enabled: false
+    endpoint: /metrics
+
+sentry:
+  dsn: ""
+
+logging:
+  file:
+    path: ./logs/
+  level:
+    root: INFO
+    lavalink: INFO
+    dev.lavalink.youtube.http.YoutubeOauth2Handler: INFO
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      max-history: 7

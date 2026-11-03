@@ -23,6 +23,10 @@ const SEG_KEEP_MS = 3650 * DAY;
 const PING_KEEP_MS = 90 * DAY;
 const SAMPLE_KEEP_MS = 90 * DAY;
 const SERIES_POINTS = 300;
+/** ช่วงอัปเดตที่ยาวเกินนี้ถือว่าผิดปกติ: กลับไปแสดงเป็นหยุดทำงาน (สีแดง) ตั้งได้ด้วย env UPDATE_MAX_MIN */
+export const UPDATE_MAX_MS = (Number(process.env.UPDATE_MAX_MIN) > 0 ? Number(process.env.UPDATE_MAX_MIN) : 15) * 60_000;
+/** แอดมินตั้งสถานะอัปเดตไว้แต่บริการยังไม่ล่ม: รอได้นานเท่านี้ก่อนยกเลิกเอง */
+const UPDATE_FLAG_TTL_MS = HOUR;
 
 export type Range = '24h' | '7d' | '30d' | 'all';
 export const RANGE_LIST: Range[] = ['24h', '7d', '30d', 'all'];
@@ -38,10 +42,10 @@ const pool = new pg.Pool({
 });
 pool.on('error', e => console.error('PostgreSQL pool error:', e));
 
-const SEG_COLS = 'id, status, started_at, ended_at, last_seen, cause, note';
-type SegRow = { id: string; status: number; started_at: string; ended_at: string | null; last_seen: string; cause: string | null; note: string | null };
+const SEG_COLS = 'id, status, started_at, ended_at, last_seen, cause, note, kind';
+type SegRow = { id: string; status: number; started_at: string; ended_at: string | null; last_seen: string; cause: string | null; note: string | null; kind: string | null };
 // pg คืนค่า bigint เป็น string จึงแปลงเป็น number ทุกครั้ง
-type Seg = { id: number; status: number; start: number; end: number | null; lastSeen: number; cause: string | null; note: string | null };
+type Seg = { id: number; status: number; start: number; end: number | null; lastSeen: number; cause: string | null; note: string | null; kind: string | null };
 const toSeg = (r: SegRow): Seg => ({
 	id: Number(r.id),
 	status: r.status,
@@ -50,6 +54,7 @@ const toSeg = (r: SegRow): Seg => ({
 	lastSeen: Number(r.last_seen),
 	cause: r.cause,
 	note: r.note,
+	kind: r.kind,
 });
 
 let ready: Promise<void> | null = null;
@@ -94,6 +99,7 @@ export function initHistory(): Promise<void> {
 				ALTER TABLE segments ADD COLUMN IF NOT EXISTS cause TEXT;
 				ALTER TABLE segments ADD COLUMN IF NOT EXISTS note TEXT;
 				ALTER TABLE segments ADD COLUMN IF NOT EXISTS note_at BIGINT;
+				ALTER TABLE segments ADD COLUMN IF NOT EXISTS kind TEXT;
 				CREATE TABLE IF NOT EXISTS settings(
 					key TEXT PRIMARY KEY,
 					value TEXT NOT NULL,
@@ -103,6 +109,10 @@ export function initHistory(): Promise<void> {
 			await migrateHostBasis();
 			// ช่วงที่ค้างเปิดอยู่ตอนโปรแกรมดับ ให้ปิดที่เวลาที่เห็นล่าสุด (ไม่นับเป็น downtime)
 			await pool.query(`UPDATE segments SET ended_at = last_seen WHERE ended_at IS NULL`);
+			// เวอร์ชันล่าสุดที่เคยเห็นของแต่ละ service (ไว้จับการเปลี่ยนเวอร์ชันหลังจากเริ่มระบบใหม่)
+			const vs = await pool.query<{ service: string; version: string }>(
+				`SELECT DISTINCT ON (service) service, version FROM samples WHERE version IS NOT NULL ORDER BY service, ts DESC`);
+			for (const v of vs.rows) lastVer.set(v.service, v.version);
 		})();
 		ready.catch(() => { ready = null; }); // ลองใหม่ได้ถ้าเชื่อมต่อไม่สำเร็จ
 	}
@@ -151,6 +161,41 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
 export const getBanner = () => getSetting<Banner>('banner', null);
 /** service ที่กำลังปรับปรุง: { ชื่อ service: ข้อความ } */
 export const getMaintenance = () => getSetting<Record<string, string>>('maintenance', {});
+/** service ที่แอดมินตั้งเป็นสถานะอัปเดต: { ชื่อ service: เวลาที่ตั้ง } เคลียร์เองเมื่อกลับมาทำงาน */
+export const getUpdating = () => getSetting<Record<string, number>>('updating', {});
+
+const UPDATE_ADMIN_CAUSE = 'อัปเดตระบบ (ผู้ดูแลระบุ)';
+const trackVersion = (name: string) => !name.startsWith('nodes');
+/** เวอร์ชันล่าสุดที่เห็นตอนทำงานปกติ และ segment หยุดทำงานล่าสุดที่ยังไม่กลับมา */
+const lastVer = new Map<string, string>();
+const lastDown = new Map<string, { id: string; start: number }>();
+
+/** ผลของการอัปเดตที่เพิ่งเสร็จ (บริการกลับมาทำงานแล้ว) */
+export interface UpdateEvent { service: string; from: string | null; to: string | null; ms: number; auto: boolean; /** เวอร์ชันเปลี่ยนโดยไม่มี downtime (rebuild แบบไม่หยุด) */ noDowntime?: boolean }
+
+/**
+ * แอดมินสลับสถานะอัปเดตของ service
+ * เปิด: ถ้าหยุดทำงานอยู่ ช่วงนี้กลายเป็นอัปเดตทันที ถ้ายังไม่ล่ม ช่วงที่ล่มภายใน 1 ชม. จะถูกนับเป็นอัปเดต
+ * ปิด: ช่วงหยุดทำงานที่ค้างอยู่กลับเป็นหยุดทำงานปกติ
+ */
+export async function setUpdating(service: string, on: boolean, realCause: string | null): Promise<void> {
+	const map = await getUpdating();
+	if (on) map[service] = Date.now(); else delete map[service];
+	await setSetting('updating', map);
+	await initHistory();
+	if (on) await pool.query(`UPDATE segments SET kind = 'update', cause = $2 WHERE service = $1 AND ended_at IS NULL AND status = 0`, [service, UPDATE_ADMIN_CAUSE]);
+	else await pool.query(`UPDATE segments SET kind = NULL, cause = $2 WHERE service = $1 AND ended_at IS NULL AND status = 0 AND kind = 'update'`, [service, realCause]);
+	cache.clear();
+}
+
+/** service ที่อยู่ในสถานะอัปเดตตอนนี้ (หยุดทำงานเพราะอัปเดต และยังไม่นานเกิน UPDATE_MAX_MS) */
+export async function getUpdatingNow(now = Date.now()): Promise<Record<string, { start: number; cause: string | null }>> {
+	await initHistory();
+	const rows = (await pool.query<{ service: string; started_at: string; cause: string | null }>(
+		`SELECT service, started_at, cause FROM segments WHERE ended_at IS NULL AND status = 0 AND kind = 'update' AND started_at >= $1::bigint`,
+		[now - UPDATE_MAX_MS])).rows;
+	return Object.fromEntries(rows.map(r => [r.service, { start: Number(r.started_at), cause: r.cause }]));
+}
 
 /* ---------- การเขียน (cache สถานะที่เปิดอยู่ในหน่วยความจำ ลดการ query) ---------- */
 const open = new Map<string, { id: string; status: number; touched: number }>();
@@ -163,12 +208,17 @@ let lastPrune = 0;
 let writing: Promise<void> = Promise.resolve();
 
 /** เรียกทุกครั้งที่เช็คสถานะเสร็จ (คิวการเขียนตามลำดับ ไม่ทำให้การเฝ้าดูค้าง) */
-export function recordStatus(list: SampleStatus[], now = Date.now()): void {
-	writing = writing.then(() => write(list, now)).catch(e => console.error('บันทึกประวัติสถานะไม่สำเร็จ:', e));
+export function recordStatus(list: SampleStatus[], now = Date.now()): Promise<UpdateEvent[]> {
+	const job = writing.then(() => write(list, now));
+	writing = job.then(() => {}, e => { console.error('บันทึกประวัติสถานะไม่สำเร็จ:', e); });
+	return job.catch(() => []);
 }
 
-async function write(list: SampleStatus[], now: number) {
+async function write(list: SampleStatus[], now: number): Promise<UpdateEvent[]> {
 	await initHistory();
+	const events: UpdateEvent[] = [];
+	let flagsChanged = false;
+	let flags: Record<string, number> | null = null;
 	const client = await pool.connect();
 	try {
 		await client.query('BEGIN');
@@ -176,15 +226,45 @@ async function write(list: SampleStatus[], now: number) {
 			const cur = open.get(s.name);
 			if (!cur || cur.status !== s.status) {
 				if (cur) await client.query(`UPDATE segments SET ended_at = $1, last_seen = $1 WHERE id = $2`, [now, cur.id]);
-				const cause = s.status === 0 ? (getActiveError(s.name)?.message ?? null) : null;
+				let cause = s.status === 0 ? (getActiveError(s.name)?.message ?? null) : null;
+				let kind: string | null = null;
+				if (s.status === 0) {
+					flags ??= await getUpdating();
+					const at = flags[s.name];
+					if (at !== undefined && now - at <= UPDATE_FLAG_TTL_MS) { kind = 'update'; cause = UPDATE_ADMIN_CAUSE; }
+				}
 				const r = await client.query<{ id: string }>(
-					`INSERT INTO segments(service, status, started_at, last_seen, cause) VALUES ($1, $2, $3, $3, $4) RETURNING id`,
-					[s.name, s.status, now, cause],
+					`INSERT INTO segments(service, status, started_at, last_seen, cause, kind) VALUES ($1, $2, $3, $3, $4, $5) RETURNING id`,
+					[s.name, s.status, now, cause, kind],
 				);
 				open.set(s.name, { id: r.rows[0].id, status: s.status, touched: now });
+				if (s.status === 0) lastDown.set(s.name, { id: r.rows[0].id, start: now });
+				else if (s.status === 1 && cur) {
+					// กลับมาทำงานหลังหยุด: เป็นการอัปเดตถ้าแอดมินตั้งไว้ หรือเวอร์ชันที่ service ส่งมาไม่เหมือนเดิม (ขึ้นหรือย้อนก็ตาม)
+					const down = lastDown.get(s.name);
+					lastDown.delete(s.name);
+					const to = s.version?.trim() || null;
+					const from = lastVer.get(s.name) ?? null;
+					const changed = trackVersion(s.name) && !!to && !!from && to !== from;
+					if (down) {
+						const seg = (await client.query<{ kind: string | null }>(`SELECT kind FROM segments WHERE id = $1`, [down.id])).rows[0];
+						if (changed || seg?.kind === 'update') {
+							if (changed) await client.query(`UPDATE segments SET kind = 'update', cause = $2 WHERE id = $1`, [down.id, `อัปเดตเวอร์ชันจาก ${from} -> ${to}`]);
+							events.push({ service: s.name, from: changed ? from : to, to, ms: now - down.start, auto: changed });
+							flags ??= await getUpdating();
+							if (s.name in flags) { delete flags[s.name]; flagsChanged = true; }
+						}
+					}
+				}
 			} else if (now - cur.touched >= TOUCH_MS) {
 				await client.query(`UPDATE segments SET last_seen = $1 WHERE id = $2`, [now, cur.id]);
 				cur.touched = now;
+			}
+			if (s.status === 1 && s.version && trackVersion(s.name)) {
+				const to = s.version.trim(), from = lastVer.get(s.name);
+				// เวอร์ชันเปลี่ยนแต่ไม่มีช่วงหยุดทำงานให้ผูก: แจ้งว่าอัปเดต (ไม่ใช่ "กลับมาทำงาน")
+				if (from && from !== to && !events.some(e => e.service === s.name)) events.push({ service: s.name, from, to, ms: 0, auto: true, noDowntime: true });
+				lastVer.set(s.name, to);
 			}
 			if (s.status === 1 && typeof s.ping === 'number' && now - (lastPing.get(s.name) ?? 0) >= PING_EVERY_MS) {
 				await client.query(`INSERT INTO pings(service, ts, ping) VALUES ($1, $2, $3)`, [s.name, now, Math.round(s.ping)]);
@@ -220,12 +300,16 @@ async function write(list: SampleStatus[], now: number) {
 		client.release();
 	}
 
+	if (flagsChanged && flags) await setSetting('updating', flags).catch(e => console.error(e));
+	cache.clear();
+
 	if (now - lastPrune > PRUNE_EVERY_MS) {
 		lastPrune = now;
 		await pool.query(`DELETE FROM segments WHERE ended_at IS NOT NULL AND ended_at < $1`, [now - SEG_KEEP_MS]);
 		await pool.query(`DELETE FROM pings WHERE ts < $1`, [now - PING_KEEP_MS]);
 		await pool.query(`DELETE FROM samples WHERE ts < $1`, [now - SAMPLE_KEEP_MS]);
 	}
+	return events;
 }
 
 /* ------------------------------------------------------------------ */
@@ -236,6 +320,9 @@ export interface Brief {
 	since: number | null;
 	ms: number | null;
 	last: { kind: 'down' | 'up'; start: number; end: number; duration: number } | null;
+	/** หยุดทำงานเพราะอัปเดต (ยังไม่นานเกิน UPDATE_MAX_MS): แสดงสีเขียวเข้ม ไม่ถือว่าระบบล่ม */
+	upd: boolean;
+	updCause: string | null;
 }
 
 /** หมายเหตุ: อ่านจาก DB แบบ async จึงเรียกผ่าน `await getBrief(...)` */
@@ -265,7 +352,8 @@ export async function getBrief(s: StatusData, now = Date.now()): Promise<Brief> 
 			last = { kind: state === 'up' ? 'down' : 'up', start: g.start, end, duration: Math.max(0, end - g.start) };
 		}
 	}
-	return { state, since, ms: since !== null ? Math.max(0, now - since) : null, last };
+	const upd = state === 'down' && !!isOpen && isOpen.status === 0 && isOpen.kind === 'update' && now - isOpen.start <= UPDATE_MAX_MS;
+	return { state, since, ms: since !== null ? Math.max(0, now - since) : null, last, upd, updCause: upd ? isOpen!.cause : null };
 }
 
 /* ------------------------------------------------------------------ */
@@ -358,6 +446,8 @@ export interface StripItem {
 	open: boolean;
 	cause: string | null;
 	note: string | null;
+	/** ช่วงหยุดทำงานเพราะอัปเดต (ไม่นานเกินกำหนด) */
+	upd: boolean;
 }
 export interface Incident {
 	id: number;
@@ -366,13 +456,14 @@ export interface Incident {
 	duration: number;
 	cause: string | null;
 	note: string | null;
+	upd: boolean;
 }
 export interface Report {
 	now: number;
 	range: Range;
 	from: number;
 	stat: Stat;
-	buckets: { start: number; end: number; observed: number; down: number }[];
+	buckets: { start: number; end: number; observed: number; down: number; upd: number }[];
 	strip: StripItem[];
 	incidents: Incident[];
 	pingFrom: number;
@@ -406,6 +497,8 @@ export async function getReport(service: string, range: Range = '30d', now = Dat
 		open: g.end === null,
 		cause: g.cause,
 		note: g.note,
+		// อัปเดตที่ไม่นานเกินกำหนด: นับเป็น downtime ในสถิติ แต่ไม่แสดงว่าระบบล่ม
+		upd: g.kind === 'update' && (g.end ?? now) - g.start <= UPDATE_MAX_MS,
 	}));
 
 	let observed = 0, down = 0, incidents = 0, longest = 0;
@@ -420,13 +513,13 @@ export async function getReport(service: string, range: Range = '30d', now = Dat
 	const n = BUCKETS[range], size = span / n;
 	const buckets = Array.from({ length: n }, (_, i) => {
 		const start = from + i * size, end = start + size;
-		let ob = 0, dn = 0;
+		let ob = 0, dn = 0, up = 0;
 		for (const g of segs) {
 			const o = overlap(g.start, g.end, start, end);
 			ob += o;
-			if (g.status === 0) dn += o;
+			if (g.status === 0) { if (g.upd) up += o; else dn += o; }
 		}
-		return { start, end, observed: ob, down: dn };
+		return { start, end, observed: ob, down: dn, upd: up };
 	});
 
 	const strip: StripItem[] = segs
@@ -444,6 +537,7 @@ export async function getReport(service: string, range: Range = '30d', now = Dat
 				open: g.open,
 				cause: g.cause,
 				note: g.note,
+				upd: g.upd,
 			};
 		});
 
@@ -458,6 +552,7 @@ export async function getReport(service: string, range: Range = '30d', now = Dat
 			duration: g.end - g.start,
 			cause: g.cause,
 			note: g.note,
+			upd: g.upd,
 		}));
 
 	// ping: รวมเป็น 120 จุดในช่วง (AVG ใน SQL)

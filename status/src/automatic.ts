@@ -35,7 +35,7 @@ async function checkAll() {
 		allS = await _checkAll(false);
 
 		// บันทึก timeline และตัวอย่างค่า (ต้องทำก่อน send เพื่อให้ข้อความแจ้งเตือนมีข้อมูล downtime/uptime ล่าสุดครบ)
-		recordStatus(allS);
+		const updates = await recordStatus(allS);
 		// ประวัติของแต่ละ node เพลงเก็บแยก (service "nodes:<NODE>") ไม่ขึ้นในรายการหน้าแรก
 		const m = getMusic();
 		if (m) recordStatus(m.nodes.map(nodeStatusData));
@@ -50,7 +50,7 @@ async function checkAll() {
 
 		// Discord: ทุกการเปลี่ยนสถานะ (รวมตอนเริ่มโปรแกรม) เหมือนเดิม
 		if(changedStatus.length > 0){
-			await send(true, false, false, changedStatus);
+			await send(true, false, false, changedStatus, updates);
 		};
 		// อีเมล: เฉพาะ service ที่สลับระหว่างทำงาน <-> หยุดทำงาน จริง
 		// ไม่ส่งตอนเริ่มโปรแกรม และไม่นับสถานะ "ไม่ทราบ/กำลังเริ่ม" (-1) ระหว่างทาง
@@ -61,7 +61,13 @@ async function checkAll() {
 			return before !== undefined && before !== current.status && !(current.name in maint);
 		});
 		if(mailChanged.length > 0){
-			await send(false, true, false, mailChanged);
+			await send(false, true, false, mailChanged, updates);
+		};
+
+		// เวอร์ชันเปลี่ยนโดยไม่มี downtime (rebuild แบบไม่หยุด): แจ้งอย่างเดียว ไม่ได้ล่มจึงไม่ต้องบอกว่ากลับมาทำงาน
+		const quiet = updates.filter(u => u.noDowntime && !(u.service in maint) && !changedStatus.some(c => c.name === u.service) && !mailChanged.some(c => c.name === u.service));
+		if(quiet.length > 0){
+			await send(true, true, false, allS.filter(s => quiet.some(u => u.service === s.name)), quiet);
 		};
 
 		if(allS.some(s => s.status === 0))throw new Error('Some service down');

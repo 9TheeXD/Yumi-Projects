@@ -1,0 +1,7 @@
+# Local patches on top of the pinned NodeLink image (built from the git ref in docker-compose.yml:
+#   docker build -t yumi/nodelink:v3.9.0 "https://github.com/PerformanC/NodeLink.git#<NODELINK_REF>"
+# ). Each patch fails the build if its target text is gone, so an upgrade cannot drop it silently.
+ARG BASE=yumi/nodelink:v3.9.0
+FROM ${BASE}
+COPY patches/ /tmp/patches/
+RUN node /tmp/patches/apply.mjs && rm -rf /tmp/patches

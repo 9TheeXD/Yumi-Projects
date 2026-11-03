@@ -32,9 +32,9 @@ export const ICON = {
 const NOISE = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E")`;
 
 const CSS = `
-:root{--bg:#060203;--ink:#fff3f1;--muted:#b99a97;--dim:#8a706d;--brand:#f13b3b;--ok:#3ddc97;--warn:#fbbf24;--load:#4cc9f0;--down:#ff5a5f;--c:var(--brand);color-scheme:dark}
+:root{--bg:#060203;--ink:#fff3f1;--muted:#b99a97;--dim:#8a706d;--brand:#f13b3b;--ok:#3ddc97;--warn:#fbbf24;--load:#4cc9f0;--down:#ff5a5f;--upd:#1f9d5c;--c:var(--brand);color-scheme:dark}
 *,*::before,*::after{box-sizing:border-box}
-[data-state=ok]{--c:var(--ok)}[data-state=load]{--c:var(--load)}[data-state=down]{--c:var(--down)}
+[data-state=ok]{--c:var(--ok)}[data-state=load]{--c:var(--load)}[data-state=down]{--c:var(--down)}[data-state=upd]{--c:var(--upd)}
 html{background:var(--bg)}
 body{margin:0;min-height:100vh;color:var(--ink);font-family:'Kanit',system-ui,sans-serif;
 	background:radial-gradient(1000px 600px at 12% -15%,rgba(241,59,59,.34),transparent 65%),radial-gradient(800px 600px at 105% 105%,rgba(130,0,0,.35),transparent 60%),var(--bg);
@@ -70,7 +70,7 @@ a{color:inherit;text-decoration:none}button{font:inherit}
 .hero>*{position:relative;z-index:1}
 .hl{display:flex;align-items:center;gap:20px}
 .pulse{position:relative;width:18px;height:18px;border-radius:50%;background:var(--c);box-shadow:0 0 24px var(--c);flex:none}
-[data-state=ok] .pulse::after,[data-state=load] .pulse::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--c);animation:ping 2.4s ease-out infinite}
+[data-state=ok] .pulse::after,[data-state=upd] .pulse::after,[data-state=load] .pulse::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--c);animation:ping 2.4s ease-out infinite}
 .hero h1{margin:0;font-size:clamp(1.6rem,5vw,2.5rem);font-weight:700;line-height:1.2}
 .hero p{margin:6px 0 0;color:var(--muted);font-weight:300}
 .bigpct{text-align:right}.bigpct b{display:block;font-size:2.5rem;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
@@ -90,7 +90,7 @@ a{color:inherit;text-decoration:none}button{font:inherit}
 .tag{padding:0 9px;border-radius:99px;background:rgba(251,191,36,.14);color:var(--warn);border:1px solid rgba(251,191,36,.35);font-size:.76rem}
 .bars{display:flex;gap:3px;height:36px}
 .bars i{flex:1;min-width:0;border-radius:4px;background:rgba(255,255,255,.1);transition:transform .15s,filter .15s}
-.bars i.ok{background:var(--ok);opacity:.85}.bars i.warn{background:var(--warn)}.bars i.bad{background:var(--down)}
+.bars i.ok{background:var(--ok);opacity:.85}.bars i.warn{background:var(--warn)}.bars i.upd{background:var(--upd)}.bars i.bad{background:var(--down)}
 .bars i:hover{transform:scaleY(1.15);filter:brightness(1.25)}
 .pct{text-align:right}.pct b{display:block;font-size:1.15rem;font-weight:600;font-variant-numeric:tabular-nums}.pct span{color:var(--dim);font-size:.78rem;font-weight:300}
 .legend{display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:center;margin-top:18px;color:var(--dim);font-size:.82rem;font-weight:300}
@@ -102,8 +102,8 @@ a{color:inherit;text-decoration:none}button{font:inherit}
 .dhero>*{position:relative;z-index:1}
 .beacon{position:relative;width:104px;height:104px;display:grid;place-items:center;flex:none}
 .beacon::before,.beacon::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--c);opacity:0}
-[data-state=ok] .beacon::before,[data-state=load] .beacon::before{animation:ring 2.8s ease-out infinite}
-[data-state=ok] .beacon::after,[data-state=load] .beacon::after{animation:ring 2.8s ease-out 1.4s infinite}
+[data-state=ok] .beacon::before,[data-state=upd] .beacon::before,[data-state=load] .beacon::before{animation:ring 2.8s ease-out infinite}
+[data-state=ok] .beacon::after,[data-state=upd] .beacon::after,[data-state=load] .beacon::after{animation:ring 2.8s ease-out 1.4s infinite}
 [data-state=down] .beacon::before{opacity:.45}
 .core{width:66px;height:66px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 35% 30%,color-mix(in srgb,var(--c) 70%,#fff),var(--c));box-shadow:0 0 50px color-mix(in srgb,var(--c) 55%,transparent)}
 .core svg{width:30px;height:30px;fill:none;stroke:#0c0506;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round}
@@ -140,7 +140,7 @@ a{color:inherit;text-decoration:none}button{font:inherit}
 .banner.warn{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.4);color:#fbbf24}
 .banner.danger{background:rgba(255,90,95,.12);border-color:rgba(255,90,95,.45);color:#ff9ea1}
 .tag.maint{background:rgba(76,201,240,.14);color:#8fdcf6;border-color:rgba(76,201,240,.35)}
-.strip i.warn{background:var(--warn);opacity:1;z-index:1}
+.strip i.warn{background:var(--warn);opacity:1;z-index:1}.strip i.upd{background:var(--upd);opacity:1;z-index:1}
 .strip i{cursor:pointer;transition:filter .15s}
 .strip i:hover{filter:brightness(1.35)}
 .strip i.load{background:var(--load)}
@@ -241,7 +241,8 @@ export function renderIndex(items: Item[], limits: Record<string, number>, range
 	const bannerHtml = ctx.banner && !embed ? `<div class="banner ${ctx.banner.level}">${esc(ctx.banner.text)}</div>` : '';
 	const linkTarget = embed ? ' target="_blank" rel="noopener noreferrer"' : '';
 	const now = Date.now();
-	const down = items.filter(i => i.s.status === 0).length;
+	const down = items.filter(i => i.s.status === 0 && !i.b.upd).length;
+	const updating = items.filter(i => i.b.upd).length;
 	const loading = items.filter(i => i.s.status === -1).length;
 	const n = items.length;
 
@@ -249,6 +250,8 @@ export function renderIndex(items: Item[], limits: Record<string, number>, range
 		? { key: 'load', title: t('ov_checking'), sub: t('ov_checking_sub') }
 		: down > 0
 			? { key: 'down', title: down === n ? t('ov_all_down') : t('ov_some_down', { n: down, total: n }), sub: t('ov_down_sub') }
+			: updating > 0
+				? { key: 'upd', title: t('ov_updating'), sub: t('ov_updating_sub', { n: updating }) }
 			: loading > 0
 				? { key: 'load', title: t('ov_loading'), sub: t('ov_loading_sub', { n: loading, total: n }) }
 				: { key: 'ok', title: t('ov_ok'), sub: t('ov_ok_sub', { n, total: n }) };
@@ -258,14 +261,14 @@ export function renderIndex(items: Item[], limits: Record<string, number>, range
 	const total = obs ? ((obs - dn) / obs) * 100 : null;
 
 	const rows = items.map(({ s, r, b }) => {
-		const st = stateTh(s.status);
+		const st = b.upd ? { key: 'upd', label: t('state_upd') } : stateTh(s.status);
 		const limited = (limits[s.name] ?? 0) > now;
 		const cur = b.ms !== null && b.since !== null
 			? `<span>${b.state === 'up' ? 'Uptime' : 'Downtime'} <b data-since="${b.since}">${fmtDurTh(b.ms)}</b></span>` : '';
 		const ping = typeof s.ping === 'number' && s.status === 1 ? `<span>${s.ping} ms</span>` : '';
 		const bars = r.buckets.map(k => {
-			const cls = k.observed <= 0 ? 'na' : k.down <= 0 ? 'ok' : k.down < 5 * 60_000 ? 'warn' : 'bad';
-			const tip = k.observed <= 0 ? t('no_data') : k.down <= 0 ? t('no_downtime') : t('down_for', { d: fmtDurTh(k.down) });
+			const cls = k.observed <= 0 ? 'na' : k.down > 0 ? (k.down < 5 * 60_000 ? 'warn' : 'bad') : k.upd > 0 ? 'upd' : 'ok';
+			const tip = k.observed <= 0 ? t('no_data') : k.down > 0 ? t('down_for', { d: fmtDurTh(k.down + k.upd) }) : k.upd > 0 ? t('upd_for', { d: fmtDurTh(k.upd) }) : t('no_downtime');
 			const sp = k.end - k.start;
 			const label = sp >= 36 * 3_600_000 ? `${fmtDayTh(k.start)} - ${fmtDayTh(k.end - 1)}` : sp >= 20 * 3_600_000 ? fmtDayTh(k.end - 1) : fmtDateTh(k.start);
 			return `<i class="${cls}" title="${label}: ${tip}"></i>`;
@@ -289,6 +292,7 @@ ${bannerHtml}
 ${n ? `<section class="list glass">${rows}</section>` : ''}
 <div class="legend">
 	<span><i style="background:var(--ok)"></i>${t('legend_ok')}</span>
+	<span><i style="background:var(--upd)"></i>${t('legend_upd')}</span>
 	<span><i style="background:var(--warn)"></i>${t('legend_warn')}</span>
 	<span><i style="background:var(--down)"></i>${t('legend_bad')}</span>
 	<span><i style="background:rgba(255,255,255,.12)"></i>${t('no_data')}</span>
@@ -306,21 +310,21 @@ export const resourcePanels = (series: SeriesPoint[]) => {
 
 /** รายละเอียดของแต่ละช่วงในไทม์ไลน์: สี เวลา ระยะเวลา สาเหตุ และหมายเหตุ */
 export const segTip = (g: Report['strip'][number], label: string, k: string) => {
-	const col = k === 'down' ? '#ff5a5f' : k === 'warn' ? '#fbbf24' : k === 'load' ? '#4cc9f0' : '#3ddc97';
+	const col = k === 'down' ? '#ff5a5f' : k === 'warn' ? '#fbbf24' : k === 'upd' ? '#1f9d5c' : k === 'load' ? '#4cc9f0' : '#3ddc97';
 	const lines = [
 		`<div style="color:${col};font-weight:600">● ${esc(label)}${k === 'warn' ? ` ${t('seg_short')}` : ''}</div>`,
 		`<div>${t('seg_since', { t: fmtDateTh(g.start) })}</div>`,
 		`<div>${t('seg_until', { t: g.open ? t('now') : fmtDateTh(g.end) })}</div>`,
 		`<div>${t('seg_dur', { d: fmtDurTh(g.end - g.start) })}</div>`,
 	];
-	if (g.status === 0) lines.push(`<div style="color:#ff9ea1">${t('seg_cause', { c: g.cause ? esc(g.cause) : t('unknown_cause') })}</div>`);
+	if (g.status === 0) lines.push(`<div style="color:${g.upd ? '#5fd99a' : '#ff9ea1'}">${t('seg_cause', { c: g.cause ? esc(g.cause) : t('unknown_cause') })}</div>`);
 	if (g.note) lines.push(`<div style="color:#b99a97">${t('seg_note', { n: esc(g.note) })}</div>`);
 	return lines.join('');
 };
 
 export function renderDetail(s: StatusData, r: Report, b: Brief, limitedUntil: number, range: Range, series: SeriesPoint[] = [], ctx: PageCtx = { banner: null, maint: {} }): string {
 	const now = Date.now();
-	const st = stateTh(s.status);
+	const st = b.upd ? { key: 'upd', label: t('state_upd') } : stateTh(s.status);
 	const limited = limitedUntil > now;
 	const base = `/${encodeURIComponent(s.name)}`;
 
@@ -346,8 +350,8 @@ export function renderDetail(s: StatusData, r: Report, b: Brief, limitedUntil: n
 
 	const span = now - r.from;
 	const strip = r.strip.map(g => {
-		const k = g.status === 1 ? 'ok' : g.status === 0 ? (g.end - g.start < 5 * 60_000 ? 'warn' : 'down') : 'load';
-		const label = g.status === 1 ? t('state_ok') : g.status === 0 ? t('state_down') : t('state_load');
+		const k = g.status === 1 ? 'ok' : g.status === 0 ? (g.upd ? 'upd' : g.end - g.start < 5 * 60_000 ? 'warn' : 'down') : 'load';
+		const label = g.status === 1 ? t('state_ok') : g.status === 0 ? (g.upd ? t('state_upd') : t('state_down')) : t('state_load');
 		return `<i class="${k}" style="left:${g.left.toFixed(3)}%;width:${g.width.toFixed(3)}%" data-tip="${esc(segTip(g, label, k))}"></i>`;
 	}).join('');
 
@@ -372,7 +376,7 @@ export function renderDetail(s: StatusData, r: Report, b: Brief, limitedUntil: n
 	const main = `
 ${ctx.banner ? `<div class="banner ${ctx.banner.level}">${esc(ctx.banner.text)}</div>` : ''}
 <section class="dhero glass">
-	<div class="beacon"><div class="core">${ICON[st.key as 'ok' | 'load' | 'down']}</div></div>
+	<div class="beacon"><div class="core">${ICON[(st.key === 'upd' ? 'ok' : st.key) as 'ok' | 'load' | 'down']}</div></div>
 	<div class="ttl"><h1 translate="no">${esc(displayName(s.name))}</h1>
 		<span class="pill">${st.label}</span>${ctx.maint[s.name] !== undefined ? `<span class="pill" style="--c:var(--load)">${t('maint_pill', { m: esc(ctx.maint[s.name]) })}</span>` : ''}${limited ? `<span class="pill" style="--c:var(--warn)">${t('rate_pill')}</span>` : ''}</div>
 	<div class="clock">${clock}</div>

@@ -4,6 +4,7 @@ import { formatTime } from "../utils/messages.js";
 import { Kazagumo } from "kazagumo";
 import Env from "../utils/env.js";
 import { InteractionElements } from "../utils/interactionElements.js";
+import { choiceValue, musicSearch } from "../music/resolver.js";
 type Locale = 'id' | 'da' | 'de' | 'en-GB' | 'en-US' | 'es-ES' | 'es-419' | 'fr' | 'hr' | 'it' | 'lt' | 'hu' | 'nl' | 'no' | 'pl' | 'pt-BR' | 'ro' | 'fi' | 'sv-SE' | 'vi' | 'tr' | 'cs' | 'el' | 'bg' | 'ru' | 'uk' | 'hi' | 'th' | 'zh-CN' | 'ja' | 'zh-TW' | 'ko';
 
 export class Autocomplete {
@@ -15,11 +16,17 @@ const iE = new InteractionElements;
 
 function shortSourceName(source?: string) {
   const map: Record<string, string> = {
-    youtube: "yt",
-    soundcloud: "sc",
+    youtube: "YouTube", ytmusic: "YT Music", soundcloud: "SoundCloud", spotify: "Spotify",
+    applemusic: "Apple Music", deezer: "Deezer", audiomack: "Audiomack",
   };
 
-  return source ? map[source] ?? source : source;
+  return source ? map[source] ?? source : 'unknown';
+};
+const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
+// "Source・Title - Artist 「3:21」", title and artist cut so the whole line fits (Discord max 100).
+const choiceName = (track: { sourceName?: string; title: string; author?: string; length?: number }) => {
+  const author = track.author?.replace(/ - Topic$/, '').trim();
+  return `${shortSourceName(track.sourceName)}・${cut(track.title, 40)}${author ? ` - ${cut(author, 24)}` : ''} 「${formatTime((track.length || 0) / 1000)}」`.slice(0, 100);
 };
 
 if(interaction.guild){
@@ -34,7 +41,11 @@ if(interaction.guild){
         const source = interaction.options.get('source', false);
         if (!query) return interaction.respond([]);
 
-        const Yresults = (await kazagumo.search(query, { requester: member })).tracks.filter(t=>t.sourceName == 'youtube');
+        const res = await musicSearch(kazagumo, query, { requester: member, userId: member.id, kind: 'autocomplete' });
+        const Yresults = res.tracks;
+        // Playlist / album link: offer the whole list first (value = the link, queued in full by /play).
+        const listChoice: ApplicationCommandOptionChoiceData[] = res.type === 'PLAYLIST' && query.trim().length <= 100
+          ? [{ name: `📃 ${res.playlistName || 'Playlist'} (${res.tracks.length})`.slice(0, 100), value: query.trim() }] : [];
         // const Sresults = (await kazagumo.search(query, { requester: member })).tracks.filter(t=>t.sourceName == 'spotify');
         // const tracks = [...Yresults.slice(0, 10), ...Sresults.slice(0, 10)];
         const tracks = Yresults.slice(0, 10);
@@ -43,10 +54,10 @@ if(interaction.guild){
           return interaction.respond([]);
         }
 
-        const choices: ApplicationCommandOptionChoiceData[] = tracks.slice(0, 25).map((track,i) => ({
-          name: `${track.sourceName || 'unknown'}・${track.title.slice(0, 80)} 「${formatTime((track.length || 0) / 1000)}」`.slice(0, 100),
-          value: track.uri || `unknown${i}`,
-        }));
+        const choices: ApplicationCommandOptionChoiceData[] = [...listChoice, ...tracks.slice(0, 24).map((track,i) => ({
+          name: choiceName(track),
+          value: choiceValue(track, i),
+        }))];
 
         return interaction.respond(choices);
       }catch(e: any){
@@ -63,7 +74,7 @@ if(interaction.guild){
           if(focus.name == 'search'){
             if(!focus.value)return interaction.respond([]);
 
-            const Yresults = (await kazagumo.search(focus.value.toString(), { requester: member })).tracks.filter(t=>t.sourceName == 'youtube');
+            const Yresults = (await musicSearch(kazagumo, focus.value.toString(), { requester: member, userId: member.id, kind: 'autocomplete' })).tracks;
             // const Sresults = (await kazagumo.search(query, { requester: member })).tracks.filter(t=>t.sourceName == 'spotify');
             // const tracks = [...Yresults.slice(0, 10), ...Sresults.slice(0, 10)];
             const tracks = Yresults.slice(0, 10);
@@ -73,8 +84,8 @@ if(interaction.guild){
             }
 
             const choices: ApplicationCommandOptionChoiceData[] = tracks.slice(0, 25).map((track,i) => ({
-              name: `${track.sourceName || 'unknown'}・${track.title.slice(0, 80)} 「${formatTime((track.length || 0) / 1000)}」`.slice(0, 100),
-              value: track.uri || `unknown${i}`,
+              name: choiceName(track),
+              value: choiceValue(track, i),
             }));
 
             return interaction.respond(choices);

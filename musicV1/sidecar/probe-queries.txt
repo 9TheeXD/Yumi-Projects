@@ -1,0 +1,12 @@
+# Default voiceprobe / soak set: label music that needs a working account from this IP.
+# No Rick Astley / lofi radio: those play without login and made the soak report a node without
+# an account as working.
+ytsearch:P9D
+ytsearch:potato ทิ้งไว้กลางทาง
+ytsearch:blackpink jump
+ytmsearch:ลาลาลอย
+ytsearch:bodyslam ความเชื่อ
+ytmsearch:jeff satur ดาว
+ytmsearch:milli สุดปัง
+scsearch:lofi chill beat
+https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3

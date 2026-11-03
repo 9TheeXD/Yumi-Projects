@@ -5,6 +5,8 @@ import session from 'express-session'; // Import session
 import { Kazagumo, KazagumoPlayer, KazagumoTrack } from 'kazagumo';
 import { getUserChannelId } from './playerServer.js';
 import { isDev, isM } from './utils/env.js';
+import { musicSearch } from './music/resolver.js';
+import { breakerStatus } from './music/breaker.js';
 
 // Extend Session Data Type (Optional but good for TS)
 declare module 'express-session' {
@@ -143,7 +145,7 @@ export class APIServer {
         console.log(q);
 
         try {
-            const result = await this.kazagumo.search(q);
+            const result = await musicSearch(this.kazagumo, q);
             res.json({
                 ...result,
                 tracks: result?.tracks?.slice(0, Number(limit) || 20)
@@ -220,7 +222,8 @@ export class APIServer {
         res.json({
             system: { ram: memUsageMB, cpu: cpuPercent },
             nodes,
-            players
+            players,
+            music: breakerStatus()
         });
     }
 
@@ -294,7 +297,11 @@ export class APIServer {
                         res.status(400).json({ error: 'Invalid index' });
                         return;
                     }
-                    const result = await this.kazagumo.search(value, { requester });
+                    const result = await musicSearch(this.kazagumo, value, { requester, nodeName: player.shoukaku.node.name });
+                    if (!result.tracks[0]) {
+                        res.status(404).json({ error: 'Track not found', notice: result.notice });
+                        return;
+                    }
                     player.play(result.tracks[0]);
                     break;
                 

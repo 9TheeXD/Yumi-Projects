@@ -4,6 +4,7 @@ import { waitForDebugger } from "inspector";
 import { Kazagumo, KazagumoTrack } from "kazagumo";
 import { setTimeout as wait } from "timers/promises";
 import { sendPStatus } from "../utils/messages.js";
+import { musicSearch, noticeText, queueResult } from "../music/resolver.js";
 
 export default class Messages {
 
@@ -34,13 +35,13 @@ export default class Messages {
     });
 
     // หาเพลง
-    const result = await kazagumo.search(query, { requester: message.author });
+    const result = await musicSearch(kazagumo, query, { requester: message.author, userId: message.author.id, nodeName: player.shoukaku.node.name });
     if (!result.tracks.length) {
-      return message.reply("😢 ไม่เจอเพลงที่หา");
+      return message.reply(noticeText(result.notice, 'th') || "😢 ไม่เจอเพลงที่หา");
     }
 
     // เพิ่มเพลงเข้า queue
-    player.queue.add(result.tracks[0] as KazagumoTrack);
+    const added = queueResult(player, result);
     if(!player.playing && !player.paused)player.play();
     const text = `Loading Now Playing...`;
 
@@ -49,7 +50,7 @@ export default class Messages {
     // const m = c.isSendable() ? await c.send({ components: [new TextDisplayBuilder().setContent('Loading Message...')], flags: MessageFlags.IsComponentsV2 }) : undefined;
     player.messageId = m?.id;
     // player.showPlaylist = true;
-    const replyText = `เพิ่มเพลง: **${result.tracks[0].title}** ไปที่ข้อความ ${m.url}`;
+    const replyText = `เพิ่มเพลง: **${added}** ไปที่ข้อความ ${m.url}`;
 
     await wait(300);
     await sendPStatus(client, kazagumo, player);

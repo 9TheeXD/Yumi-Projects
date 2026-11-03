@@ -3,7 +3,7 @@ import { formatDataSize } from 'global/common-functions';
 import { Client, GatewayIntentBits, GuildTextBasedChannel, MessageFlags, ContainerBuilder, TextDisplayBuilder } from 'discord.js';
 import { backend, bot_main, database, frontend_main, getActiveError, getLastError, music } from './check.js';
 import { getMusic } from './music.js';
-import { getBrief, type Brief } from './history.js';
+import { getBrief, type Brief, type UpdateEvent } from './history.js';
 import { displayName, fmtDurTh } from './format.js';
 import { sendStatusMail, type MailItem } from './mail.js';
 import { StatusData } from 'global/types';
@@ -15,11 +15,21 @@ const ts = (t: number, f: 'f' | 'R' = 'f') => `<t:${Math.floor(t / 1000)}:${f}>`
 /** บรรทัดรายการ: ถ้าไม่มีข้อมูลจะเป็นตัวเล็กสีจาง (-#) เหมือนเดิม */
 const row = (label: string, value: string | null | undefined) => `${value == null ? '-# ' : ''}- **${label}**: ${value ?? 'N/A'}`;
 
-function body(s: StatusData, b: Brief): string {
-	const L: string[] = [];
-	L.push(s.status === 1 ? '**:green_circle:  กำลังทำงาน**' : s.status === -1 ? '**:blue_circle:  กำลังเริ่มระบบ**' : '**:red_circle:  หยุดทำงาน**');
+const verText = (u: UpdateEvent) => (u.from && u.to && u.from !== u.to ? `${u.from} -> ${u.to}` : u.to ? `v${u.to}` : null);
 
-	if (s.status === 0) {
+function body(s: StatusData, b: Brief, u?: UpdateEvent): string {
+	const L: string[] = [];
+	L.push(u?.noDowntime ? '**:green_circle:  อัปเดตเวอร์ชันแล้ว (ไม่มี downtime)**'
+		: u ? '**:green_circle:  อัปเดตสำเร็จ กลับมาทำงานตามปกติแล้ว**'
+		: b.upd ? '**:green_circle:  กำลังอัปเดต**'
+		: s.status === 1 ? '**:green_circle:  กำลังทำงาน**' : s.status === -1 ? '**:blue_circle:  กำลังเริ่มระบบ**' : '**:red_circle:  หยุดทำงาน**');
+
+	if (u) {
+		L.push(row('เวอร์ชัน', verText(u)));
+		if (!u.noDowntime) L.push(row('ใช้เวลาอัปเดต', fmtDurTh(u.ms)));
+	} else if (b.upd) {
+		L.push(row('สาเหตุ', b.updCause ?? 'อัปเดตระบบ'));
+	} else if (s.status === 0) {
 		const e = getActiveError(s.name);
 		L.push(row('สาเหตุ', e ? e.message : 'ไม่ทราบสาเหตุ'));
 	} else if (s.status === 1) {
@@ -57,16 +67,16 @@ function body(s: StatusData, b: Brief): string {
 
 function buildComponents(items: MailItem[], full: boolean) {
 	const now = Date.now();
-	const anyDown = items.some(i => i.s.status === 0);
+	const anyDown = items.some(i => i.s.status === 0 && !i.b.upd);
 	const head = [
 		new TextDisplayBuilder().setContent(`${anyDown ? `${ALERT_ROLE}\n` : ''}# Yumi Status`),
 		new TextDisplayBuilder().setContent(`${full ? 'รายงานสถานะประจำวัน' : 'แจ้งเตือนการเปลี่ยนแปลงสถานะ'}\n-# ${ts(now, 'f')}`),
 	];
-	const cards = items.map(({ s, b }) =>
+	const cards = items.map(({ s, b, u }) =>
 		new ContainerBuilder()
-			.setAccentColor(s.status === 1 ? 0x32cd32 : s.status === -1 ? 0x4cc9f0 : 0xff4c4c)
+			.setAccentColor(u || b.upd ? 0x1f8a52 : s.status === 1 ? 0x32cd32 : s.status === -1 ? 0x4cc9f0 : 0xff4c4c)
 			.addTextDisplayComponents(t => t.setContent(`## ${displayName(s.name)}`))
-			.addTextDisplayComponents(t => t.setContent(body(s, b)))
+			.addTextDisplayComponents(t => t.setContent(body(s, b, u)))
 	);
 	return [...head, ...cards];
 }
@@ -90,7 +100,7 @@ async function sendDiscord(items: MailItem[], full: boolean) {
 	}
 }
 
-export async function send(to_discord: boolean = true, to_mail: boolean = true, full: boolean = true, data?: StatusData[]) {
+export async function send(to_discord: boolean = true, to_mail: boolean = true, full: boolean = true, data?: StatusData[], updates: UpdateEvent[] = []) {
 	let list: StatusData[];
 	if (full) {
 		list = [
@@ -105,7 +115,7 @@ export async function send(to_discord: boolean = true, to_mail: boolean = true, 
 	}
 	if (!list.length) return;
 
-	const items: MailItem[] = await Promise.all(list.map(async s => ({ s, b: await getBrief(s) })));
+	const items: MailItem[] = await Promise.all(list.map(async s => ({ s, b: await getBrief(s), u: updates.find(e => e.service === s.name) })));
 	const tasks: Promise<unknown>[] = [];
 	if (to_discord) tasks.push(sendDiscord(items, full).catch(e => console.error('ไม่สามารถส่งข้อความไปที่ Discord ได้:', e)));
 	if (to_mail) tasks.push(sendStatusMail(items, full ? 'daily' : 'change').catch(e => console.error('ไม่สามารถส่งอีเมลได้:', e)));

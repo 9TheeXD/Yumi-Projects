@@ -1,0 +1,76 @@
+# Lavalink (backup node) + its own yt-cipher.
+# Separate cipher from NodeLink on purpose: one failing does not take the other down,
+# and this stack can move to another host/IP as its own failure domain.
+#
+#   cp .env.example .env && docker compose up -d
+services:
+  lavalink: &lavalink
+    image: ghcr.io/lavalink-devs/lavalink:${LAVALINK_TAG:-4.2.2}
+    container_name: yumi_lavalink
+    restart: unless-stopped
+    mem_limit: ${LAVALINK_MEM_LIMIT:-1g}
+    environment: &lavalink_env
+      _JAVA_OPTIONS: -Xmx${LAVALINK_HEAP:-768m}
+      SERVER_PORT: "2333"
+      LAVALINK_SERVER_PASSWORD: ${LAVALINK_PASSWORD:?set LAVALINK_PASSWORD}
+      # youtube-source snapshot = commit hash. 1.18.2 barely loads after SABR.
+      LAVALINK_PLUGINS_0_DEPENDENCY: dev.lavalink.youtube:youtube-plugin:${YT_PLUGIN_VERSION:-2be8e542d3f6f178e048dca565892684c2e40177}
+      LAVALINK_PLUGINS_0_SNAPSHOT: "true"
+      # LavaSrc (Spotify / Apple Music / Deezer). Settings in application.yml under plugins.lavasrc.
+      LAVALINK_PLUGINS_1_DEPENDENCY: com.github.topi314.lavasrc:lavasrc-plugin:${LAVASRC_VERSION:-4.8.3}
+      # Spotify search needs a client id/secret from developer.spotify.com. Off until set.
+      PLUGINS_LAVASRC_SOURCES_SPOTIFY: ${SPOTIFY_ENABLED:-false}
+      PLUGINS_LAVASRC_SPOTIFY_CLIENTID: ${SPOTIFY_CLIENT_ID:-}
+      PLUGINS_LAVASRC_SPOTIFY_CLIENTSECRET: ${SPOTIFY_CLIENT_SECRET:-}
+      # Deezer on Lavalink plays Deezer's own stream and needs an account cookie (arl) plus the
+      # decryption key. Off until set; NodeLink handles Deezer search without them (YouTube mirror).
+      PLUGINS_LAVASRC_SOURCES_DEEZER: ${DEEZER_ENABLED:-false}
+      PLUGINS_LAVASRC_DEEZER_ARL: ${DEEZER_ARL:-}
+      PLUGINS_LAVASRC_DEEZER_MASTERDECRYPTIONKEY: ${DEEZER_MASTER_KEY:-}
+      PLUGINS_YOUTUBE_OAUTH_ENABLED: ${YT_OAUTH_ENABLED:-false}
+      PLUGINS_YOUTUBE_OAUTH_REFRESHTOKEN: ${YT_REFRESH_TOKEN:-}
+      PLUGINS_YOUTUBE_OAUTH_SKIPINITIALIZATION: ${YT_OAUTH_SKIP_INIT:-true}
+      PLUGINS_YOUTUBE_POT_TOKEN: ${YT_PO_TOKEN:-}
+      PLUGINS_YOUTUBE_POT_VISITORDATA: ${YT_VISITOR_DATA:-}
+      PLUGINS_YOUTUBE_REMOTECIPHER_URL: ${YT_CIPHER_URL:-http://yt-cipher:8001}
+      PLUGINS_YOUTUBE_REMOTECIPHER_USERAGENT: yumi
+      LOGGING_LEVEL_DEV_LAVALINK_YOUTUBE: ${YT_LOG_LEVEL:-INFO}
+      LOGGING_LEVEL_MOE_KYOKOBOT_KOE: ${KOE_LOG_LEVEL:-INFO}
+    volumes:
+      - ./application.yml:/opt/Lavalink/application.yml:ro
+      - ./plugins:/opt/Lavalink/plugins
+    ports:
+      # Loopback only: the bots run on this host. Set LAVALINK_BIND=0.0.0.0 to serve other hosts.
+      - "${LAVALINK_BIND:-127.0.0.1}:${LAVALINK_PORT:-2333}:2333"
+    # For IPv6 rotation uncomment, remove `ports`, set YT_CIPHER_URL=http://127.0.0.1:8002.
+    # network_mode: host
+    depends_on:
+      - yt-cipher
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null --header=\"Authorization: $$LAVALINK_SERVER_PASSWORD\" http://127.0.0.1:2333/version || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Second Lavalink with its own burner account (YT_REFRESH_TOKEN_2). Shares plugins/ and yt-cipher.
+  lavalink2:
+    <<: *lavalink
+    container_name: yumi_lavalink2
+    ports:
+      - "${LAVALINK_BIND:-127.0.0.1}:${LAVALINK2_PORT:-2334}:2333"
+    environment:
+      <<: *lavalink_env
+      PLUGINS_YOUTUBE_OAUTH_ENABLED: "true"
+      PLUGINS_YOUTUBE_OAUTH_REFRESHTOKEN: ${YT_REFRESH_TOKEN_2:-}
+      PLUGINS_YOUTUBE_OAUTH_SKIPINITIALIZATION: "true"
+
+  yt-cipher:
+    image: ghcr.io/kikkia/yt-cipher@${YT_CIPHER_DIGEST:-sha256:4c5ec381ff57336cfc24822d2b526a5ad7cd0171f61065a1bbc87bb736842449}
+    container_name: yumi_lavalink_cipher
+    restart: unless-stopped
+    mem_limit: ${YT_CIPHER_MEM_LIMIT:-512m}
+    environment:
+      - OVERRIDE_PLAYER_VARIANT=IAS
+    ports:
+      - "127.0.0.1:${YT_CIPHER_PORT:-8012}:8001"

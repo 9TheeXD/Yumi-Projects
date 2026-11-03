@@ -7,7 +7,8 @@
     "start": "node build/index.js",
     "dev:m": "cross-env IS_DEV=true MODE=music nodemon --exec tsx src/index.ts",
     "start:m": "cross-env MODE=music node build/index.js",
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "test": "tsx test/resolver.test.mts"
   },
   "devDependencies": {
     "@types/node": "^24.3.1",

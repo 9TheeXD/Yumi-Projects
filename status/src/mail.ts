@@ -2,7 +2,7 @@ import 'dotenv/config';
 import nodemailer from 'nodemailer';
 import type { StatusData } from 'global/types';
 import { formatDataSize } from 'global/common-functions';
-import type { Brief } from './history.js';
+import type { Brief, UpdateEvent } from './history.js';
 import { displayName, fmtDateTh, fmtDurTh } from './format.js';
 import { getActiveError, getLastError } from './check.js';
 import { FONT, esc, mailButton, mailDoc, mailFooter, mailHeader, nowTh } from './mail-theme.js';
@@ -17,15 +17,15 @@ import { DEFAULT_PREFS, t, tzLabel, withPrefs } from './i18n.js';
  *   MAIL_TO     (ค่าเริ่มต้น thirphathrphlphun@gmail.com, คั่นหลายคนด้วย ,)
  *   STATUS_PAGE_URL  (ลิงก์ปุ่ม "ดูหน้าสถานะ" ถ้าไม่ตั้งจะไม่แสดงปุ่ม)
  */
-export interface MailItem { s: StatusData; b: Brief }
+export interface MailItem { s: StatusData; b: Brief; u?: UpdateEvent }
 export type MailMode = 'daily' | 'change';
-type Kind = 'ok' | 'down' | 'load';
+type Kind = 'ok' | 'down' | 'load' | 'upd';
 
 /** สีเส้นข้างการ์ด และสีของค่าหลัก (ค่าสว่าง; ธีมมืดเปลี่ยนผ่าน class) */
-const ACC: Record<Kind, string> = { ok: '#2fbf7f', down: '#e5484d', load: '#2ba6d6' };
+const ACC: Record<Kind, string> = { ok: '#2fbf7f', down: '#e5484d', load: '#2ba6d6', upd: '#1f8a52' };
 
-const kindOf = (s: StatusData): Kind => (s.status === 1 ? 'ok' : s.status === -1 ? 'load' : 'down');
-const labelOf = (s: StatusData) => (s.status === 1 ? t('state_ok') : s.status === -1 ? t('state_load') : t('state_down'));
+const kindOf = (s: StatusData, b?: Brief): Kind => (b?.upd ? 'upd' : s.status === 1 ? 'ok' : s.status === -1 ? 'load' : 'down');
+const labelOf = (s: StatusData, b?: Brief) => (b?.upd ? t('state_upd') : s.status === 1 ? t('state_ok') : s.status === -1 ? t('state_load') : t('state_down'));
 
 /** ข้อความสองช่อง: ปัจจุบัน และ ครั้งล่าสุดของสถานะตรงข้าม */
 function metrics(it: MailItem) {
@@ -47,7 +47,10 @@ function metrics(it: MailItem) {
 }
 
 /** ข้อความสาเหตุ: ถ้าหยุดทำงานบอกสาเหตุปัจจุบัน ถ้ากลับมาแล้วบอกข้อผิดพลาดล่าสุดก่อนหน้า */
-function errorText(s: StatusData): string | null {
+function errorText(s: StatusData, b?: Brief, u?: UpdateEvent): string | null {
+	if (u?.noDowntime) return t('m_version_updated', { v: u.from && u.to ? `${u.from} -> ${u.to}` : (u.to ?? '—') });
+	if (u) return t('m_updated', { v: u.from && u.to && u.from !== u.to ? `${u.from} -> ${u.to}` : u.to ? `v${u.to}` : '—', d: fmtDurTh(u.ms) });
+	if (b?.upd) return t('m_updating', { c: b.updCause ?? t('state_upd') });
 	if (s.status === 0) {
 		const e = getActiveError(s.name);
 		return t('m_cause', { c: e ? e.message : t('unknown_cause') });
@@ -59,10 +62,11 @@ function errorText(s: StatusData): string | null {
 	return null;
 }
 
-function errorRow(s: StatusData): string {
-	const t = errorText(s);
+function errorRow(s: StatusData, b?: Brief, u?: UpdateEvent): string {
+	const t = errorText(s, b, u);
 	if (!t) return '';
-	return `<tr><td class="t-down" style="padding:0 20px 12px 20px;font-family:${FONT};font-size:13px;line-height:1.6;color:#b42323">${esc(t)}</td></tr>`;
+	const k = u || b?.upd ? 'upd' : 'down';
+	return `<tr><td class="t-${k}" style="padding:0 20px 12px 20px;font-family:${FONT};font-size:13px;line-height:1.6;color:${k === 'upd' ? '#0a5c37' : '#b42323'}">${esc(t)}</td></tr>`;
 }
 
 function chips(s: StatusData): string {
@@ -76,7 +80,7 @@ function chips(s: StatusData): string {
 
 function card(it: MailItem): string {
 	const { s } = it;
-	const k = kindOf(s);
+	const k = kindOf(s, it.b);
 	const { cur, last } = metrics(it);
 	return `
 <tr><td style="padding:0 0 14px 0">
@@ -84,7 +88,7 @@ function card(it: MailItem): string {
 <tr><td style="padding:18px 20px 6px 20px">
 	<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
 		<td class="ink" style="font-family:${FONT};font-size:18px;font-weight:600;color:#1d1719">${esc(displayName(s.name))}</td>
-		<td align="right"><span class="b-${k}" style="display:inline-block;padding:4px 13px;border-radius:99px;background:#dff5ea;color:#0d7a4b;font-family:${FONT};font-size:12px;font-weight:600">${labelOf(s)}</span></td>
+		<td align="right"><span class="b-${k}" style="display:inline-block;padding:4px 13px;border-radius:99px;background:#dff5ea;color:#0d7a4b;font-family:${FONT};font-size:12px;font-weight:600">${labelOf(s, it.b)}</span></td>
 	</tr></table>
 </td></tr>
 <tr><td style="padding:10px 20px 6px 20px">
@@ -101,14 +105,15 @@ function card(it: MailItem): string {
 		</td>
 	</tr></table>
 </td></tr>
-${errorRow(s)}
+${errorRow(s, it.b, it.u)}
 <tr><td style="padding:12px 20px 16px 20px;font-family:${FONT}">${chips(s)}</td></tr>
 </table>
 </td></tr>`;
 }
 
 export function buildMail(items: MailItem[], mode: MailMode, unsubUrl = '') {
-	const downs = items.filter(i => i.s.status === 0);
+	const downs = items.filter(i => i.s.status === 0 && !i.b.upd);
+	const upds = items.filter(i => i.b.upd);
 	const ups = items.filter(i => i.s.status === 1);
 	const names = (l: MailItem[]) => l.map(i => displayName(i.s.name)).join(', ');
 	const url = process.env.STATUS_PAGE_URL;
@@ -125,10 +130,17 @@ export function buildMail(items: MailItem[], mode: MailMode, unsubUrl = '') {
 		subject = mode === 'daily'
 			? t('m_subj_daily_down', { n: downs.length })
 			: t('m_subj_down', { names: names(downs) });
+	} else if (upds.length) {
+		kind = 'upd';
+		title = t('ov_updating');
+		sub = names(upds);
+		subject = t('m_subj_upd', { names: names(upds) });
 	} else if (mode === 'change' && ups.length) {
-		title = t('m_recovered');
+		const done = ups.filter(i => i.u && !i.u.noDowntime);
+		const ver = ups.filter(i => i.u?.noDowntime);
+		title = done.length ? t('m_updated_title') : ver.length && ver.length === ups.length ? t('m_version_title') : t('m_recovered');
 		sub = names(ups);
-		subject = t('m_subj_up', { names: names(ups) });
+		subject = done.length ? t('m_subj_updated', { names: names(done) }) : ver.length && ver.length === ups.length ? t('m_subj_version', { names: names(ver) }) : t('m_subj_up', { names: names(ups) });
 	} else if (items.some(i => i.s.status === -1)) {
 		kind = 'load';
 		title = t('ov_loading');
@@ -139,9 +151,9 @@ export function buildMail(items: MailItem[], mode: MailMode, unsubUrl = '') {
 	const intro = mode === 'daily' ? t('m_daily') : t('m_change');
 	const hero = `
 <tr><td style="padding:0 0 18px 0">
-<table role="presentation" class="hero-${kind}" width="100%" cellpadding="0" cellspacing="0" style="background:${kind === 'ok' ? '#e9f8f1' : kind === 'down' ? '#fdeeee' : '#e7f5fb'};border:1px solid ${kind === 'ok' ? '#7fd9a9' : kind === 'down' ? '#f29a9d' : '#7fc9e6'};border-radius:20px">
+<table role="presentation" class="hero-${kind}" width="100%" cellpadding="0" cellspacing="0" style="background:${kind === 'ok' ? '#e9f8f1' : kind === 'upd' ? '#dcf3e5' : kind === 'down' ? '#fdeeee' : '#e7f5fb'};border:1px solid ${kind === 'ok' ? '#7fd9a9' : kind === 'upd' ? '#4fb87d' : kind === 'down' ? '#f29a9d' : '#7fc9e6'};border-radius:20px">
 <tr><td style="padding:26px 26px;font-family:${FONT}">
-	<div class="t-${kind}" style="font-size:13px;color:${kind === 'ok' ? '#0d7a4b' : kind === 'down' ? '#b42323' : '#0b6e99'}">${intro}</div>
+	<div class="t-${kind}" style="font-size:13px;color:${kind === 'ok' ? '#0d7a4b' : kind === 'upd' ? '#0a5c37' : kind === 'down' ? '#b42323' : '#0b6e99'}">${intro}</div>
 	<div class="ink" style="margin-top:6px;font-size:26px;font-weight:700;line-height:1.3;color:#1d1719">${esc(title)}</div>
 	<div class="mut" style="margin-top:8px;font-size:15px;font-weight:300;color:#5f5355">${esc(sub)}</div>
 </td></tr></table>
@@ -164,8 +176,8 @@ ${footer}`, sub);
 		`Yumi Status - ${title}`, sub, '',
 		...items.map(it => {
 			const { cur, last } = metrics(it);
-			const et = errorText(it.s);
-			return `${displayName(it.s.name)}: ${labelOf(it.s)}\n  ${cur.label}: ${cur.value} (${cur.note})\n  ${last.label}: ${last.value} (${last.note})${et ? `\n  ${et}` : ''}`;
+			const et = errorText(it.s, it.b, it.u);
+			return `${displayName(it.s.name)}: ${labelOf(it.s, it.b)}\n  ${cur.label}: ${cur.value} (${cur.note})\n  ${last.label}: ${last.value} (${last.note})${et ? `\n  ${et}` : ''}`;
 		}),
 		url ? `\n${t('m_view_text', { url })}` : '',
 		unsubUrl ? `\n${t('m_unsub_text', { url: unsubUrl })}` : '',

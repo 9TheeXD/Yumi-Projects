@@ -1,3 +1,4 @@
+import { friendlyError } from "../utils/friendly.js";
 import { CacheType, ChatInputCommandInteraction, Client, CommandInteraction, DiscordAPIError, Interaction, MessageFlags, TextDisplayBuilder, underline } from "discord.js";
 import chalk from "chalk";
 import { editPStatus, playerStatus_component, sendPStatus } from "../utils/messages.js";
@@ -6,6 +7,7 @@ import { setTimeout as wait } from "timers/promises";
 import Env from "../utils/env.js";
 import { clockToMs } from "global/common-functions";
 import { InteractionElements } from "../utils/interactionElements.js";
+import { musicSearch, noticeText, queueResult } from "../music/resolver.js";
 type Locale = 'id' | 'da' | 'de' | 'en-GB' | 'en-US' | 'es-ES' | 'es-419' | 'fr' | 'hr' | 'it' | 'lt' | 'hu' | 'nl' | 'no' | 'pl' | 'pt-BR' | 'ro' | 'fi' | 'sv-SE' | 'vi' | 'tr' | 'cs' | 'el' | 'bg' | 'ru' | 'uk' | 'hi' | 'th' | 'zh-CN' | 'ja' | 'zh-TW' | 'ko';
 
 export class SlashCommands {
@@ -43,7 +45,7 @@ if(interaction.guild){
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const member = interaction.guild.members.cache.get(interaction.member?.user.id || '');
     const sub = modeM ? interaction.commandName : (interaction.options.getSubcommandGroup() || interaction.options.getSubcommand());
-    console.debug(chalk.yellowBright.bold('[Yumi SC]'), `Command ${chalk.bold(interaction.options.getSubcommandGroup() ? `${interaction.options.getSubcommandGroup()} ${interaction.options.getSubcommand()}` : sub)} was interacted!`);
+    console.debug(chalk.yellowBright.bold('[Yumi SC]'), `Command ${chalk.bold(interaction.options.getSubcommandGroup() ? `${interaction.options.getSubcommandGroup()} ${interaction.options.getSubcommand()}` : sub)} was interacted by ${interaction.user.id} in ${interaction.guildId}`);
     if(!member)return;
     if(sub === 'play'){
       const query = interaction.options.getString('search', true);
@@ -57,14 +59,16 @@ if(interaction.guild){
           textId: interaction.channel?.id,
         });
 
-        const result = await kazagumo.search(query, { requester: member.user });
+        const result = await musicSearch(kazagumo, query, { requester: member.user, userId: member.id, nodeName: player.shoukaku.node.name });
+        const notice = noticeText(result.notice, interaction.locale);
         if (!result.tracks.length) {
-          return interaction.editReply({ content: iE.song_not_found_message[interaction.locale] });
+          return interaction.editReply({ content: notice || iE.song_not_found_message[interaction.locale] });
         }
 
         console.debug({playing: player.playing, paused: player.paused});
 
-        player.queue.add(result.tracks[0] as KazagumoTrack);
+        // Playlist / album link: queue every track (capped), otherwise the best match only.
+        const added = queueResult(player, result);
         if(!player.paused)player.play();
         const text = `Loading Now Playing...`;  /// lang
         if(!interaction.channel || !interaction.channel.isSendable())return;
@@ -77,13 +81,13 @@ if(interaction.guild){
           : await interaction.channel.send({ components: [new TextDisplayBuilder().setContent(text)], flags: MessageFlags.IsComponentsV2 });
         // const m = await interaction.reply({ components: [new TextDisplayBuilder().setContent(text)], flags: MessageFlags.IsComponentsV2 });
         player.messageId = m?.id;
-        interaction.editReply({ content: iE.song_added_message[interaction.locale](result.tracks[0].title, m.url) });
+        interaction.editReply({ content: [notice, iE.song_added_message[interaction.locale](added, m.url)].filter(Boolean).join('\n') });
 
         await wait(300);
         await sendPStatus(client, kazagumo, player);
       }catch(e: any){
         console.error(e);
-        await interaction.editReply({ content: `Error: ${e.message}` });  /// lang
+        await interaction.editReply({ content: friendlyError(e, interaction.locale) });  /// lang
       }
     }if(sub === 'pause'){
       if(!member.voice.channel){
@@ -106,7 +110,7 @@ if(interaction.guild){
         await interaction.deleteReply();
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'skip'){
@@ -130,7 +134,7 @@ if(interaction.guild){
         await interaction.deleteReply();
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'stop'){
@@ -161,7 +165,7 @@ if(interaction.guild){
         await interaction.deleteReply();
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'resume'){
@@ -185,7 +189,7 @@ if(interaction.guild){
         await interaction.deleteReply();
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'volume'){
@@ -215,7 +219,7 @@ if(interaction.guild){
         };
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'connect'){
@@ -246,7 +250,7 @@ if(interaction.guild){
         await interaction.deleteReply();
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'loop'){
@@ -276,7 +280,7 @@ if(interaction.guild){
         };
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'now'){
@@ -306,7 +310,7 @@ if(interaction.guild){
         await interaction.deleteReply();
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'shuffle'){
@@ -330,7 +334,7 @@ if(interaction.guild){
         await interaction.deleteReply();
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'seek'){
@@ -355,7 +359,7 @@ if(interaction.guild){
         await interaction.deleteReply();
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === 'queue'){
@@ -388,7 +392,7 @@ if(interaction.guild){
         await interaction.deleteReply();
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     }if(sub === '247'){
@@ -413,7 +417,7 @@ if(interaction.guild){
         await interaction.editReply(`Set 24/7 mode to \`${player[247] ? 'enabled' : 'disabled'}\``);
       }catch(e: any){
         console.error(e);
-        await interaction.editReply(`Error: ${e.message}`);  /// lang
+        await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
       }
       return;
     };

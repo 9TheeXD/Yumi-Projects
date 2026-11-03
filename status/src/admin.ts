@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import express, { type Express } from 'express';
 import type { StatusData } from 'global/types';
 import { getActiveError } from './check.js';
-import { getBanner, getMaintenance, getSegment, getSetting, recentDowns, setSegmentNote, setSetting, type Banner } from './history.js';
+import { getBanner, getMaintenance, getSegment, getSetting, getUpdating, getUpdatingNow, recentDowns, setSegmentNote, setSetting, setUpdating, UPDATE_MAX_MS, type Banner } from './history.js';
 import { adminCounts, adminDeleteSubscriber, adminListSubscribers, adminRevoke } from './subscribers.js';
 import { sendRaw } from './mail.js';
 import { displayName, fmtDateTh, fmtDurTh } from './format.js';
@@ -152,12 +152,12 @@ a{color:inherit;text-decoration:none}
 .stat .k{color:var(--muted);font-size:.85rem;font-weight:300}
 .stat .v{font-size:2rem;font-weight:700;line-height:1.25;font-variant-numeric:tabular-nums}
 .stat .v small{font-size:.9rem;color:var(--dim);font-weight:300}
-.stat.ok .v{color:var(--ok)}.stat.down .v{color:var(--down)}.stat.load .v{color:var(--load)}.stat.warn .v{color:var(--warn)}
+.stat.upd .v{color:#1f9d5c}.stat.ok .v{color:var(--ok)}.stat.down .v{color:var(--down)}.stat.load .v{color:var(--load)}.stat.warn .v{color:var(--warn)}
 .grid2{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:18px;align-items:start}
 .grid2>*{min-width:0}
 .svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
 .svc{padding:18px;display:flex;flex-direction:column;gap:10px;border-radius:18px;border:1px solid rgba(255,255,255,.08);border-left:3px solid var(--dim);background:rgba(0,0,0,.22)}
-.svc.ok{border-left-color:var(--ok)}.svc.down{border-left-color:var(--down)}.svc.load{border-left-color:var(--load)}
+.svc.upd{border-left-color:#1f9d5c}.svc.ok{border-left-color:var(--ok)}.svc.down{border-left-color:var(--down)}.svc.load{border-left-color:var(--load)}
 .svc header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 .svc header b{font-weight:600}
 .svc form{display:flex;flex-direction:column;gap:8px;margin:0}
@@ -176,6 +176,7 @@ td.clip{white-space:normal;min-width:180px;max-width:280px;word-break:break-word
 .muted{color:var(--dim);font-size:.85rem;font-weight:300}
 .pill{display:inline-flex;align-items:center;gap:7px;padding:3px 11px;border-radius:99px;font-size:.8rem;border:1px solid;white-space:nowrap}
 .pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
+.pill.upd{color:#4fd48e;border-color:rgba(31,157,92,.55);background:rgba(31,157,92,.16)}
 .pill.ok{color:var(--ok);border-color:rgba(61,220,151,.4);background:rgba(61,220,151,.1)}
 .pill.down{color:var(--down);border-color:rgba(255,90,95,.45);background:rgba(255,90,95,.1)}
 .pill.load,.pill.maint{color:var(--load);border-color:rgba(76,201,240,.4);background:rgba(76,201,240,.1)}
@@ -260,6 +261,7 @@ const loginPage = (err?: string) => page('เข้าสู่ระบบผ�
 const FLASH: Record<string, ['ok' | 'err', string]> = {
 	banner: ['ok', 'บันทึกประกาศแล้ว'],
 	maint: ['ok', 'อัปเดตโหมดปรับปรุงแล้ว'],
+	updating: ['ok', 'เปลี่ยนสถานะอัปเดตแล้ว'],
 	incident: ['ok', 'บันทึกสาเหตุแล้ว'],
 	sub: ['ok', 'อัปเดตผู้รับการแจ้งเตือนแล้ว'],
 	logoutall: ['ok', 'ออกจากระบบทุกเครื่องแล้ว'],
@@ -289,15 +291,17 @@ const flashHtml = (ok: string) => {
 };
 
 async function dashboard(csrf: string, ok: string, q: string, statuses: StatusData[]): Promise<string> {
-	const [banner, maint, downs, counts, subs, activity] = await Promise.all([
+	const [banner, maint, downs, counts, subs, activity, updFlags, updNow] = await Promise.all([
 		getBanner(), getMaintenance(), recentDowns(60), adminCounts(), adminListSubscribers(500), getSetting<AuditEntry[]>('audit', []),
+		getUpdating(), getUpdatingNow(),
 	]);
 	const hidden = `<input type="hidden" name="_csrf" value="${esc(csrf)}">`;
 	const b = banner as Banner;
 	const now = Date.now();
 
 	const up = statuses.filter(s => s.status === 1).length;
-	const down = statuses.filter(s => s.status === 0).length;
+	const down = statuses.filter(s => s.status === 0 && !updNow[s.name]).length;
+	const updCount = statuses.filter(s => updNow[s.name]).length;
 	const mcount = statuses.filter(s => maint[s.name] !== undefined).length;
 	const inc24 = downs.filter(d => d.start > now - 86_400_000).length;
 
@@ -305,6 +309,7 @@ async function dashboard(csrf: string, ok: string, q: string, statuses: StatusDa
 	<div class="stats" id="overview">
 		<div class="glass stat ok"><div class="k">บริการที่ทำงาน</div><div class="v">${up}<small> / ${statuses.length}</small></div></div>
 		<div class="glass stat down"><div class="k">หยุดทำงานตอนนี้</div><div class="v">${down}</div></div>
+		<div class="glass stat upd"><div class="k">กำลังอัปเดต</div><div class="v">${updCount}</div></div>
 		<div class="glass stat load"><div class="k">กำลังปรับปรุง</div><div class="v">${mcount}</div></div>
 		<div class="glass stat warn"><div class="k">เหตุการณ์ใน 24 ชม.</div><div class="v">${inc24}</div></div>
 		<div class="glass stat ok"><div class="k">ผู้รับการแจ้งเตือน</div><div class="v">${counts.active}<small> คน</small></div></div>
@@ -326,9 +331,14 @@ async function dashboard(csrf: string, ok: string, q: string, statuses: StatusDa
 	const svcCards = statuses.length
 		? statuses.map(st => {
 			const m = maint[st.name];
-			const cls = st.status === 1 ? 'ok' : st.status === -1 ? 'load' : 'down';
-			const label = st.status === 1 ? 'ทำงานปกติ' : st.status === -1 ? 'กำลังเริ่มระบบ' : 'หยุดทำงาน';
-			const err = st.status === 0 ? getActiveError(st.name) : null;
+			const upd = updNow[st.name];
+			const cls = upd ? 'upd' : st.status === 1 ? 'ok' : st.status === -1 ? 'load' : 'down';
+			const label = upd ? 'กำลังอัปเดต' : st.status === 1 ? 'ทำงานปกติ' : st.status === -1 ? 'กำลังเริ่มระบบ' : 'หยุดทำงาน';
+			const err = st.status === 0 ? (upd ? { message: upd.cause ?? 'อัปเดตระบบ' } : getActiveError(st.name)) : null;
+			const flagged = updFlags[st.name] !== undefined;
+			const updControl = `<form method="post" action="/admin/updating">${hidden}
+						<input type="hidden" name="service" value="${esc(st.name)}"><input type="hidden" name="enable" value="${flagged || upd ? 'off' : 'on'}">
+						<button class="ghost wide" type="submit">${ic('pencil')} ${flagged || upd ? 'ยกเลิกสถานะอัปเดต' : 'ตั้งเป็นสถานะอัปเดต'}</button></form>`;
 			const control = m !== undefined
 				? `<div class="mnote">${ic('pencil')}<span>${esc(m)}</span></div>
 					<form method="post" action="/admin/maintenance">${hidden}
@@ -343,7 +353,9 @@ async function dashboard(csrf: string, ok: string, q: string, statuses: StatusDa
 				<span class="pill ${cls}">${label}</span></header>
 				${err ? `<p class="errline">${esc(err.message)}</p>` : ''}
 				${m !== undefined ? '<span class="pill maint" style="align-self:flex-start">กำลังปรับปรุง</span>' : ''}
+				${flagged && !upd ? '<span class="pill upd" style="align-self:flex-start">ตั้งสถานะอัปเดตไว้ (รอบริการหยุด)</span>' : ''}
 				${control}
+				${updControl}
 			</article>`;
 		}).join('')
 		: `<p class="muted">กำลังตรวจสอบบริการ…</p>`;
@@ -583,6 +595,16 @@ export function registerAdmin(app: Express, getStatuses: () => StatusData[]) {
 		await setSetting('maintenance', maint);
 		await audit(req, `${on ? 'เปิด' : 'ปิด'}โหมดปรับปรุง: ${service}`);
 		res.redirect(303, '/admin?ok=maint');
+	});
+
+	app.post('/admin/updating', form, async (req: any, res: any) => {
+		if (!authedPost(req, res)) return;
+		const service = String(req.body?.service ?? '');
+		if (!SERVICE_RE.test(service)) return res.redirect(303, '/admin?ok=bad');
+		const on = req.body?.enable === 'on';
+		await setUpdating(service, on, getActiveError(service)?.message ?? null);
+		await audit(req, `${on ? 'ตั้ง' : 'ยกเลิก'}สถานะอัปเดต: ${service}`);
+		res.redirect(303, '/admin?ok=updating');
 	});
 
 	app.post('/admin/incident/:id', form, async (req: any, res: any) => {

@@ -13,6 +13,7 @@ import { DiscordAPIError } from 'discord.js';
 import dayjs from 'dayjs';
 import { setTimeout as wait } from 'timers/promises';
 import { Buttons } from './commands/buttons.js';
+import { nodeLoginButton } from './commands/nodeLogin.js';
 import { Modals } from './commands/modalSubmit.js';
 import { SlashCommands } from './commands/slashCommands.js';
 import { Autocomplete } from './commands/autocomplete.js';
@@ -87,6 +88,13 @@ declare module 'discord.js' {
     latestUpdate: number;
     showInfo: boolean;
     247: boolean;
+    recovering?: boolean;
+    restoring?: boolean;
+    // Since when nothing has been playing (autoDisconnect leaves after a few minutes).
+    idleSince?: number;
+    // Recent unrecoverable failures, and the last automatic rejoin after the bot was dropped.
+    failTimes?: number[];
+    rejoinedAt?: number;
   }
   interface KazagumoEvents {
     debug: [message: string];
@@ -132,6 +140,7 @@ const kazagumo = new KazagumoManager(client) as Kazagumo;
     // SlashCommand
     if(i.isChatInputCommand()){ commands.slashCommands.slashCommands(i, client, kazagumo); };
     // // Button
+    if(i.isButton() && i.customId.startsWith('ytlogin:')){ nodeLoginButton(i).catch(e=>console.error('[NodeLogin]', e)); return; };
     if(i.isButton()){ commands.buttons.buttons(i, client, kazagumo); };
     // // ModalSubmit
     if(i.isModalSubmit()){ commands.modals.modals(i, client, kazagumo); };
@@ -155,7 +164,7 @@ const kazagumo = new KazagumoManager(client) as Kazagumo;
 
     await new Promise(r => setTimeout(r, 1_000));
     await restorePlayers(client, kazagumo);
-    autoDisconnect(kazagumo);
+    autoDisconnect(client, kazagumo);
   });
 
   await client.login(Env('BOT_TOKEN'));
