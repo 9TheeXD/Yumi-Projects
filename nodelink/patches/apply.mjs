@@ -34,6 +34,17 @@ const patches = [
     from: "                additionalData: {\n                  client: clientName,\n                  proxy: proxyToUse\n                }\n              }\n              this.nodelink.trackCacheManager?.set(\n                'youtube',\n                decodedTrack.identifier,\n                result,\n                1000 * 60 * 60 * 5\n              )\n              return result\n",
     to: "                additionalData: {\n                  client: clientName,\n                  proxy: proxyToUse\n                }\n              }\n              return result\n",
   },
+  {
+    // Voice reconnect circuit breaker: the voice library's 15 s connect timeout closes the socket,
+    // which trips the breaker, and the player then resets the connection and removes its 'error'
+    // listener. The same timeout callback emits 'error' ("Voice connection timed out") right after,
+    // on the old connection with no listener, so it became an uncaught exception, the worker exited
+    // and every player on the node stopped (2026-11-02 22:40 and 22:41 UTC, both NodeLinks).
+    // Keep a no-op listener on the old connection so late errors from it are dropped.
+    file: '/app/src/playback/player.ts',
+    from: "      conn.removeListener('error', this._connErrorHandler)\n",
+    to: "      conn.removeListener('error', this._connErrorHandler)\n      conn.on('error', () => {})\n",
+  },
 ];
 
 for (const p of patches) {

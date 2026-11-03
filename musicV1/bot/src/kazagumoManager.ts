@@ -287,6 +287,29 @@ export default class KazagumoManager {
       console.warn(headKE, `Track stuck in ${chalk.bold(p.guildId)}: ${p.queue.current?.title}`);
       recordPlayback(p.queue.current?.sourceName, 'track stuck');
       p.skip();
+ });kazagumo.on('playerClosed', async(p, data)=>{
+      // NodeLink sends close code 5001 when the worker that held this player crashed. The node has
+      // forgotten the player and no end or exception follows, so it stayed silent until the bot was
+      // restarted. Rebuild it at the same position, on another node when one is up.
+      if(data.code !== 5001)return;
+      const track = p.queue.current;
+      if(!track || p.recovering)return;
+      const sp = p.shoukaku;
+      const from = sp.node.name;
+      const position = sp.position;
+      console.warn(headKE, `Node ${from} lost the player in ${chalk.bold(p.guildId)} (worker failed), resuming ${track.title}`);
+      p.recovering = true;
+      try{
+        await new Promise(r => setTimeout(r, 2000));
+        if(kazagumo.players.get(p.guildId) !== p)return;
+        const target = kazagumo.shoukaku.options.nodeResolver(new Map([...kazagumo.shoukaku.nodes].filter(([n]) => n !== from))) ?? sp.node;
+        const raw = (track.getRaw() as { _raw?: Track })._raw;
+        const ported = raw && target !== sp.node ? await portTrack(kazagumo, raw, target as unknown as Node) : null;
+        sp.node = target;
+        await sp.update({ ...sp.data.playerOptions, track: { encoded: ported?.encoded ?? sp.track ?? track.track }, position, paused: p.paused });
+        console.warn(headKE, `Resumed ${track.title} in ${chalk.bold(p.guildId)} on ${target.name} (was ${from})`);
+      }catch(err){ console.error(headKE, 'Resume after worker failure error:', (err as Error).message); }
+      finally{ p.recovering = false; }
  });kazagumo.on('playerUpdate', async(p, data)=>{
       console.log(headK, `Player was updated: ${chalk.bold(p.guildId)}`);
       const player = kazagumo.players.get(p.guildId);
