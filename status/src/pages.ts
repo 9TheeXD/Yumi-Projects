@@ -350,7 +350,7 @@ export function renderTimeline(items: TimelineItem[]): string {
 		const note = i.note ? `<div class="tl-n">${t('seg_note', { n: esc(i.note) })}</div>` : '';
 		return `<div class="tl-it k-${i.kind}${live ? ' live' : ''}"><span class="tl-dot"></span><div>
 	<div class="tl-h"><span class="tl-t">${label(i.kind)}</span>${live ? `<span class="tl-w">${t('now')}</span>` : ''}<span class="tl-d">${dur}</span></div>
-	<div class="tl-w">${when}</div>${i.since ? `<div class="tl-w">${t('tl_since', { t: fmtDateTh(i.since) })}</div>` : ''}${cause}${note}</div></div>`;
+	<div class="tl-w">${when}</div>${cause}${note}</div></div>`;
 	}).join('') : `<div class="none">${t('tl_empty')}</div>`;
 	return `<section class="panel glass"><h2>${t('tl_title')}</h2><div class="tl-leg">${legend}</div><div class="tl">${list}</div></section>`;
 }
