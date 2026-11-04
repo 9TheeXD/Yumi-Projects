@@ -6,6 +6,9 @@ const handler = NextAuth({
     DiscordProvider({
       clientId: process.env.DISCORD_CLIENT_ID!,
       clientSecret: process.env.DISCORD_CLIENT_SECRET!,
+      // Discord answers the login callback with an `iss` parameter (RFC 9207). openid-client checks it
+      // against the provider issuer and fails with "issuer must be configured on the issuer" when it is unset.
+      issuer: 'https://discord.com',
       authorization: { params: { scope: 'identify guilds' } },
     }),
   ],
