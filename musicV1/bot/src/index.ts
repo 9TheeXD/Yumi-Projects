@@ -100,6 +100,8 @@ declare module 'discord.js' {
     voiceFailSince?: number;
     // The song that could not be played when every retry was used up; the Resume button and a bot restart play it again.
     failedTrack?: KazagumoTrack;
+    // Times the song did not start within 15 s, within the retry window.
+    startTimeouts?: number[];
   }
   interface KazagumoEvents {
     debug: [message: string];

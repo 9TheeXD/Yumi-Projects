@@ -260,8 +260,11 @@ export default class KazagumoManager {
       // No audio within 15 s ("playerStateChange timed out"): either the node missed the voice-ready
       // event, or its YouTube stream gave nothing (403 on that node's IP or account). Both are about
       // this node, not the song: play the same song again on another node once.
-      if(/playerStateChange timed out|Voice playback state timed out|UDP secretKey missing/i.test(error) && !tried('voiceRetry')){
-        mark('voiceRetry');
+      // A looped song can hit this every few minutes for hours, so the limit is 3 per RETRY_WINDOW
+      // (it was 1, and the next timeout then swapped the song for another upload).
+      p.startTimeouts = (p.startTimeouts ?? []).filter(at => Date.now() - at < RETRY_WINDOW);
+      if(/playerStateChange timed out|Voice playback state timed out|UDP secretKey missing/i.test(error) && p.startTimeouts.length < 3){
+        p.startTimeouts.push(Date.now());
         console.warn(headKE, `Voice start timeout in ${chalk.bold(p.guildId)}, replaying ${track.title}`);
         void replayAfterEnd(p, track, { otherNode: !/UDP secretKey/i.test(error) });
         return;
@@ -291,8 +294,9 @@ export default class KazagumoManager {
         return retryLater(p, track, true);
       }
       recordPlayback(track.sourceName, error);
-      // One retry per song, on a different source.
-      if(!tried('altRetry')){
+      // One retry per song, on a different source. Not for a looped song: the user asked for that
+      // exact song, and another upload would replace it without a word.
+      if(p.loop !== 'track' && !tried('altRetry')){
         p.recovering = true;
         try{
           const alt = await findAlternative(kazagumo, track, p.shoukaku.node.name);
