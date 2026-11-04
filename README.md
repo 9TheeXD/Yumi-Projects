@@ -11,8 +11,8 @@
 - เว็บไซต์: [yumistack.net](https://yumistack.net/)
 - Discord: [discord.gg/brxPZB3Jzy](https://discord.gg/brxPZB3Jzy)
 - งานที่กำลังทำ: [GitHub Projects](https://github.com/users/Campus2454/projects/4)
-- [โครงสร้างโปรเจค ↘](https://github.com/Campus2454/Yumi-Projects/edit/main/README.md#project-structure)
-- [สมาชิกทีม Yumi ↘](https://github.com/Campus2454/Yumi-Projects/edit/main/README.md#team-yumi)
+- [โครงสร้างโปรเจค ↘](https://github.com/Campus2454/Yumi-Projects/tree/main#project-structure)
+- [สมาชิกทีม Yumi ↘](https://github.com/Campus2454/Yumi-Projects/tree/main#team-yumi)
 
 ## Project Structure
 
