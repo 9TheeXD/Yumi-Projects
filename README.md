@@ -21,9 +21,9 @@
 | `bot/` | บอท Discord หลัก | discord.js, TypeScript |
 | `backend/` | API ฝั่ง server ของเว็บไซต์ | NestJS, TypeScript |
 | `frontend/` | เว็บไซต์ [yumistack.net](https://yumistack.net/) | Next.js |
-| `status/` | หน้า status, เก็บประวัติ downtime, แจ้งเตือน Discord และอีเมล | Express, PostgreSQL |
+| `status/` | เว็บไซต์ [status.yumistack.net](https://status.yumistack.net/), เก็บประวัติ downtime, แจ้งเตือน Discord และอีเมล | Express, PostgreSQL |
+| `music-web/` | เว็บไซต์ [music.yumistack.net](https://music.yumistack.net/), ควบคุม Player บอทเพลง | Next.js |
 | `musicV1/` | บอท Discord สำหรับเล่นเพลง | TypeScript, Kazagumo |
-| `music-web/` | เว็บไซต์ player ควบคุมบอทเพลง | Next.js |
 | `lavalink/` | Lavalink audio server | Lavalink |
 | `nodelink/` | NodeLink audio node | NodeLink |
 | `global/` | โค้ด, type และ function ที่ใช้ร่วมกันระหว่างโปรเจค | TypeScript |
@@ -34,11 +34,16 @@
 
 1) **Campus2454 (แคมปัส - ธีร์)**
    - เจ้าของโปรเจค
-   - นักพัฒนาบอท (ทำทั้งหมด 100%)
-   - นักพัฒนาเว็บไซต์ (Frontend ประมาณ 80%, Backend ทำทั้งหมด 100%)
+   - พัฒนาบอทหลัก `(ทำทั้งหมด)`
+   - พัฒนาเว็บไซต์ `(~80%)`
+   - พัฒนาบอทเพลง `(~80%)`
 2) **kxnomtom (คุณน๋ม - ขนมต้ม - บีม)**
    - ทีมช่วยเหลือเรื่องต่างๆ
-   - นักพัฒนาเว็บไซต์ (Frontend ประมาณ 20%)
+   - พัฒนาเว็บไซต์ `(~20%)`
 3) **alpha._.ice (อัลฟา)**
    - ทีมช่วยเหลือเรื่องต่างๆ
    - แอดมินและดูแลความปลอดภัยของเซิร์ฟเวอร์ Discord
+4) **Claude Code**
+   - เป็นที่ปรึกษาด้านการ Coding
+   - พัฒนาระบบ Status `(ทำทั้งหมด)`
+   - ปรับปรุงและดัดแปลง lavalink/nodelink `(ทำทั้งหมด)`
