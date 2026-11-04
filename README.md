@@ -1,42 +1,87 @@
-### Yumi Bot 
+# Yumi
 
----
+รวมโปรเจคทั้งหมดของ Yumi ไว้ใน monorepo เดียว: บอท Discord, backend, เว็บไซต์, ระบบเพลง, status และ audio node
 
-**shortcut**
+- เว็บไซต์: [yumistack.net](https://yumistack.net/)
+- Discord: [discord.gg/brxPZB3Jzy](https://discord.gg/brxPZB3Jzy)
+- งานที่กำลังทำ: [GitHub Projects](https://github.com/users/Campus2454/projects/4)
 
-- [Yumi Bot](https://github.com/users/Campus2454/projects/4)
-- [Yumi Website](https://yumistack.net/)
+👋 ยินดีต้อนรับ! Welcome!
 
-##
+## บอท Yumi
 
-**main**
+บอท Discord ที่พัฒนาโดยคนไทย 🇹🇭
 
-👋 ยินดีต้องรับ!
+หากพบข้อผิดพลาดหรือจุดบกพร่อง แจ้งให้ทีมทราบได้ทาง [Discord](https://discord.gg/brxPZB3Jzy) หรือช่องทางอื่น
 
-สวัสดี ที่นี่คือหน้าหลัก
+## โครงสร้างโปรเจค
 
-👋 Welcome!
+| โฟลเดอร์ | หน้าที่ | เทคโนโลยี |
+| --- | --- | --- |
+| `bot/` | บอท Discord หลัก | discord.js, TypeScript |
+| `backend/` | API ฝั่ง server ของเว็บไซต์ | NestJS, TypeScript |
+| `frontend/` | เว็บไซต์ yumistack.net (`website-next`) และ `/api/status` | Next.js, Tailwind |
+| `status/` | หน้า status, เก็บประวัติ downtime, แจ้งเตือน Discord และอีเมล | Express, PostgreSQL |
+| `musicV1/` | ระบบเพลงของบอท (bot, api, sidecar, sujv2) | TypeScript, Kazagumo |
+| `music-web/` | เว็บ player เพลง (`webplayer`) | Next.js |
+| `lavalink/` | Lavalink audio server (docker compose, application.yml, plugins) | Lavalink |
+| `nodelink/` | NodeLink audio node (docker compose, patch) | NodeLink |
+| `global/` | โค้ด, type และ function ที่ใช้ร่วมกันระหว่างโปรเจค | TypeScript |
+| `assets-web/` | ไฟล์ asset ของเว็บ | - |
 
-Hello, this is the main page.
+ไฟล์ระดับ root
+- `ecosystem.config.cjs` ไฟล์ตั้งค่า pm2 สำหรับรันบริการบนเครื่อง
+- `RegisterCommand.js` ลงทะเบียน slash command ของบอท (`yarn register`)
+- `yumiOffline.js` บอทสถานะ offline (`yarn sleep`)
+- `yumi_db.sql` โครงสร้างและข้อมูลฐานข้อมูลเริ่มต้น
+- `CLAUDE.md` กฎสำหรับการพัฒนาในโปรเจคนี้
 
-##
+## การพัฒนา
 
-**info**
+### เวอร์ชันก่อน push
 
-- **บอท Yumi**
+ก่อน `git push` ทุกครั้ง ให้เพิ่ม `version` ใน `package.json` ของทุกโปรเจคย่อยที่มีการเปลี่ยนแปลง รูปแบบ `MAJOR.MINOR.PATCH` (เลขแต่ละส่วนไม่มีขีดจำกัด เช่น `1.234.5678`)
 
-  เป็นบอทที่พัฒนาโดยคนไทย🇹🇭
+- PATCH: แก้บั๊ก, ปรับเล็กน้อย, refactor
+- MINOR: ฟีเจอร์ใหม่หรือพฤติกรรมที่เห็นได้ชัด
+- MAJOR: เปลี่ยนแปลงที่ไม่เข้ากับเวอร์ชันเดิม (เมื่อเจ้าของโปรเจคขอเท่านั้น)
 
-  หากมีข้อผิดพลาดหรือจุดบกพร่อง ตกหล่นไป ต้องขออภัยอย่างยิ่ง และขอให้แจ้งให้ทางเราทราบ ผ่านทาง[discord](https://discord.gg/brxPZB3Jzy) หรืออื่นๆได้
-- **หน้าที่การทำงานในทีม Yumi ของเรา**
-1) Campus2454 (แคมปัส)
-   - เป็นเจ้าของ
-   - เป็นนักพัฒนาบอท (ทำทั้งหมด100%)
-   - เป็นนักพัฒนาเว็บไซต์ (Frontend ทำประมาณ80%, Backend ทำทั้งหมด100%)
-2) kxnomtom (คุณน๋ม - ขนมต้ม - บีม)
-   - เป็นทีมช่วยเหลือเรื่องต่างๆ
-   - เป็นนักพัฒนาเว็บไซต์ (Frontend ทำประมาณ20%)
-3) alpha._.ice (อัลฟา)
-   - เป็นทีมช่วยเหลือเรื่องต่างๆ
-   - เป็นแอดมินและช่วยดูแลความปลอดภัยกับเซิร์ฟเวอร์ดิสคอร์ด
-   - อื่นๆ
+`bot`, `backend` และ `frontend` รายงาน `version` ให้ `status` การเปลี่ยน version จะถูกตรวจจับเป็นการอัปเดต จึงต้องอัปเดตให้ถูกต้องและ deploy พร้อมโค้ด
+
+### เริ่มต้นใช้งาน
+
+ติดตั้ง dependency ในแต่ละโปรเจคที่ต้องการ (ใช้ Yarn ตาม `packageManager` ของแต่ละโปรเจค)
+
+```bash
+cd <โฟลเดอร์โปรเจค>
+yarn install
+```
+
+สร้างไฟล์ `.env` ในโปรเจคที่ต้องการ ห้าม commit ค่าจริงลง git (`.gitignore` ตั้งไว้แล้ว) โปรเจคย่อยแต่ละตัวจะระบุตัวแปรที่ต้องใช้ไว้ในโค้ดหรือ README ของตัวเอง
+
+### รันบริการ
+
+- บอท: ดูคำสั่งใน `bot/package.json` แล้วรันด้วย `yarn`
+- backend: `yarn start` (ใน `backend/`)
+- เว็บไซต์: `yarn dev` (ใน `frontend/`) และ `yarn build` ก่อน deploy
+- status: `yarn auto:dev` (โหมดพัฒนา) หรือ `yarn auto:start` (production)
+- ระบบเพลง: ดู `musicV1/README.md` และ `musicV1/MUSIC_RESILIENCE.md`
+
+### Deploy
+
+- ส่วนใหญ่ deploy ผ่าน Coolify และ Docker (มี `Dockerfile.production` และ `docker-compose.yaml` ในแต่ละโปรเจค)
+- Coolify deploy อัตโนมัติเมื่อมีการ push (ตั้งค่าไว้ใน Coolify)
+- บริการบางตัวรันบนเครื่องด้วย pm2 ตาม `ecosystem.config.cjs`
+
+## ทีม Yumi
+
+1) **Campus2454 (แคมปัส)**
+   - เจ้าของโปรเจค
+   - นักพัฒนาบอท (ทำทั้งหมด 100%)
+   - นักพัฒนาเว็บไซต์ (Frontend ประมาณ 80%, Backend ทำทั้งหมด 100%)
+2) **kxnomtom (คุณน๋ม - ขนมต้ม - บีม)**
+   - ทีมช่วยเหลือเรื่องต่างๆ
+   - นักพัฒนาเว็บไซต์ (Frontend ประมาณ 20%)
+3) **alpha._.ice (อัลฟา)**
+   - ทีมช่วยเหลือเรื่องต่างๆ
+   - แอดมินและดูแลความปลอดภัยของเซิร์ฟเวอร์ Discord
