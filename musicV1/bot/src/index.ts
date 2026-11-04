@@ -95,6 +95,9 @@ declare module 'discord.js' {
     // Recent unrecoverable failures, and the last automatic rejoin after the bot was dropped.
     failTimes?: number[];
     rejoinedAt?: number;
+    // Voice failures in a row since the last successful start, and when the first one happened.
+    voiceFails?: number;
+    voiceFailSince?: number;
   }
   interface KazagumoEvents {
     debug: [message: string];

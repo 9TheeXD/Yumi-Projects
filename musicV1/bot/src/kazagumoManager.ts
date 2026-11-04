@@ -97,18 +97,43 @@ export default class KazagumoManager {
 
     const RETRY_WINDOW = 10 * 60_000;
     const REJOIN_GAP = 5 * 60_000;
+    // A Discord voice server can stay unreachable for many minutes (no UDP info on every node, on
+    // 2026-11-03 and 2026-11-04). Giving up after 3 minutes left 24/7 players silent all night.
+    const VOICE_RETRY_FOR = 60 * 60_000;
+    const VOICE_RETRY_MAX_DELAY = 5 * 60_000;
+    const humanListeners = (p: KazagumoPlayer) => {
+      const channel = p.voiceId ? client.guilds.cache.get(p.guildId)?.channels.cache.get(p.voiceId) : undefined;
+      return channel?.isVoiceBased() ? channel.members.filter(m => !m.user.bot).size : 0;
+    };
     // Song or voice failed and every quick fix was used. Wait, then play the same song again
-    // (rejoining the channel first for voice trouble). Give up after 3 failures in RETRY_WINDOW and
-    // keep the player in the channel; autoDisconnect leaves later if nothing is played.
+    // (rejoining the channel first for voice trouble). Song failures give up after 3 failures in
+    // RETRY_WINDOW. Voice failures are not the song's fault: keep retrying with a growing delay
+    // while people are in the channel, for up to VOICE_RETRY_FOR. After giving up, keep the player
+    // in the channel; autoDisconnect leaves later if nothing is played.
     const retryLater = (p: KazagumoPlayer, track: KazagumoTrack, voice: boolean) => {
       const now = Date.now();
-      p.failTimes = [...(p.failTimes ?? []).filter(at => now - at < RETRY_WINDOW), now];
-      if(p.failTimes.length > 3){
-        console.warn(headKE, `Giving up on ${track.title} in ${chalk.bold(p.guildId)}`);
-        void notify(client, p.guildId, p.textId, 'gaveup', NOTICE.trackGaveUp(track.title));
-        return;
+      let delay = 15_000;
+      if(voice){
+        p.voiceFailSince ??= now;
+        p.voiceFails = (p.voiceFails ?? 0) + 1;
+        if(now - p.voiceFailSince > VOICE_RETRY_FOR || !humanListeners(p)){
+          console.warn(headKE, `Giving up on ${track.title} in ${chalk.bold(p.guildId)} after ${Math.round((now - p.voiceFailSince) / 60_000)} min of voice failures`);
+          p.voiceFailSince = undefined;
+          p.voiceFails = 0;
+          void notify(client, p.guildId, p.textId, 'gaveup', NOTICE.trackGaveUp(track.title));
+          return;
+        }
+        delay = Math.min(30_000 * 2 ** (p.voiceFails - 1), VOICE_RETRY_MAX_DELAY);
+      }else{
+        p.failTimes = [...(p.failTimes ?? []).filter(at => now - at < RETRY_WINDOW), now];
+        if(p.failTimes.length > 3){
+          console.warn(headKE, `Giving up on ${track.title} in ${chalk.bold(p.guildId)}`);
+          void notify(client, p.guildId, p.textId, 'gaveup', NOTICE.trackGaveUp(track.title));
+          return;
+        }
       }
-      void notify(client, p.guildId, p.textId, voice ? 'voice' : 'retry', voice ? NOTICE.voiceTrouble() : NOTICE.trackRetry(track.title));
+      // One voice notice per outage: a long one would post a notice on every retry.
+      if(!voice || p.voiceFails === 1)void notify(client, p.guildId, p.textId, voice ? 'voice' : 'retry', voice ? NOTICE.voiceTrouble() : NOTICE.trackRetry(track.title));
       p.recovering = true;
       setTimeout(async () => {
         try{
@@ -118,12 +143,12 @@ export default class KazagumoManager {
             kazagumo.KazagumoOptions.send(p.guildId, { op: 4, d: { guild_id: p.guildId, channel_id: p.voiceId, self_mute: conn?.muted ?? false, self_deaf: conn?.deafened ?? false } });
             await new Promise(r => setTimeout(r, 3000));
           }
-          console.warn(headKE, `Retrying ${track.title} in ${chalk.bold(p.guildId)}`);
+          console.warn(headKE, `Retrying ${track.title} in ${chalk.bold(p.guildId)}${voice ? ` (voice attempt ${p.voiceFails})` : ''}`);
           p.queue.unshift(track);
           await p.play();
         }catch(err){ console.error(headKE, 'Retry error:', (err as Error).message); }
         finally{ p.recovering = false; };
-      }, voice ? 30_000 : 15_000);
+      }, delay);
     };
 
     // A track exception is followed by a loadFailed end, and Kazagumo handles that end by playing the
@@ -209,6 +234,8 @@ export default class KazagumoManager {
  });kazagumo.on('playerStart', async(p, t)=>{
       console.log(headK, `Player was started: ${chalk.bold(p.guildId)}`);
       p.idleSince = undefined;
+      p.voiceFailSince = undefined;
+      p.voiceFails = 0;
       recordPlayback(t?.sourceName); // null when a node move resumes a player that had no current track
       await sendPStatus(client, kazagumo, p, { from: 'playerStart event' });
       savePlayers(kazagumo);
