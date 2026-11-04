@@ -98,6 +98,8 @@ declare module 'discord.js' {
     // Voice failures in a row since the last successful start, and when the first one happened.
     voiceFails?: number;
     voiceFailSince?: number;
+    // The song that could not be played when every retry was used up; the Resume button and a bot restart play it again.
+    failedTrack?: KazagumoTrack;
   }
   interface KazagumoEvents {
     debug: [message: string];

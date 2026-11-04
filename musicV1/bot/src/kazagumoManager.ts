@@ -6,7 +6,7 @@ import chalk from "chalk";
 import { Kazagumo, KazagumoPlayer, KazagumoTrack, Plugins } from "kazagumo";
 import { sendPStatus } from "./utils/messages.js";
 import { savePlayers } from "./utils/function.js";
-import { NOTICE, notify } from "./utils/friendly.js";
+import { COLOR, NOTICE, notify } from "./utils/friendly.js";
 import { musicNodes, nodeTiers, youtubeDownNodes } from "./music/nodes.js";
 
 
@@ -120,7 +120,8 @@ export default class KazagumoManager {
           console.warn(headKE, `Giving up on ${track.title} in ${chalk.bold(p.guildId)} after ${Math.round((now - p.voiceFailSince) / 60_000)} min of voice failures`);
           p.voiceFailSince = undefined;
           p.voiceFails = 0;
-          void notify(client, p.guildId, p.textId, 'gaveup', NOTICE.trackGaveUp(track.title));
+          p.failedTrack = track;
+          void notify(client, p.guildId, p.textId, 'gaveup', NOTICE.trackGaveUp(track.title), { color: COLOR.bad, resume: true });
           return;
         }
         delay = Math.min(30_000 * 2 ** (p.voiceFails - 1), VOICE_RETRY_MAX_DELAY);
@@ -128,7 +129,8 @@ export default class KazagumoManager {
         p.failTimes = [...(p.failTimes ?? []).filter(at => now - at < RETRY_WINDOW), now];
         if(p.failTimes.length > 3){
           console.warn(headKE, `Giving up on ${track.title} in ${chalk.bold(p.guildId)}`);
-          void notify(client, p.guildId, p.textId, 'gaveup', NOTICE.trackGaveUp(track.title));
+          p.failedTrack = track;
+          void notify(client, p.guildId, p.textId, 'gaveup', NOTICE.trackGaveUp(track.title), { color: COLOR.bad, resume: true });
           return;
         }
       }
@@ -236,6 +238,7 @@ export default class KazagumoManager {
       p.idleSince = undefined;
       p.voiceFailSince = undefined;
       p.voiceFails = 0;
+      p.failedTrack = undefined;
       recordPlayback(t?.sourceName); // null when a node move resumes a player that had no current track
       await sendPStatus(client, kazagumo, p, { from: 'playerStart event' });
       savePlayers(kazagumo);

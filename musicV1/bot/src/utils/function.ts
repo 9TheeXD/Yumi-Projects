@@ -44,11 +44,12 @@ export function savePlayers(kazagumo: Kazagumo) {
       volume: player.volume,
       position: player.position,
       paused: player.paused,
-      current: player.queue.current?.uri ?? null,
+      // A song that failed for good stays the current one in the file: a restart plays it again.
+      current: (player.queue.current ?? player.failedTrack)?.uri ?? null,
       queue: player.queue.map(t => t.uri),
       // Exact tracks (encoded + info). Restoring from these needs no search, so a restart cannot
       // swap the song for another version. Encoded tracks play on both NodeLink and Lavalink.
-      currentRaw: player.queue.current ? rawTrack(player.queue.current) : null,
+      currentRaw: (player.queue.current ?? player.failedTrack) ? rawTrack((player.queue.current ?? player.failedTrack)!) : null,
       queueRaw: player.queue.map(rawTrack),
       loop: player.loop,
       247: player[247] || false
@@ -180,6 +181,7 @@ async function restoreOne(client: Client, kazagumo: Kazagumo, data: SavedPlayer,
 }
 
 const IDLE_LEAVE_MS = 5 * 60_000;
+const FAILED_LEAVE_MS = 60 * 60_000;
 
 export function autoDisconnect(client: Client, kazagumo: Kazagumo) {
   const head = chalk.bold('[AutoDC]');
@@ -190,7 +192,8 @@ export function autoDisconnect(client: Client, kazagumo: Kazagumo) {
       if (player[247] || player.recovering || player.restoring) continue;
       if (player.queue.current || player.queue.size) { player.idleSince = undefined; continue; }
       player.idleSince ??= now;
-      if (now - player.idleSince < IDLE_LEAVE_MS) continue;
+      // A song that failed for good waits for the Resume button longer than an empty player does.
+      if (now - player.idleSince < (player.failedTrack ? FAILED_LEAVE_MS : IDLE_LEAVE_MS)) continue;
       console.log(head, `Leave idle player ${player.guildId}`);
       void notify(client, player.guildId, player.textId, 'idle', NOTICE.idleLeft());
       player.destroy().catch(() => {});

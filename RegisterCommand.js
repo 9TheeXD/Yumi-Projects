@@ -141,9 +141,14 @@ const musicC = [
             .setDescriptionLocalization('th', 'แสดงคิวทั้งหมด')
         )
     ),(new SlashCommandBuilder().setName('247')
-        .setDescription('Toggle 24/7 mode')
-        .setDescriptionLocalization('th', 'โหมด 24/7')
+        .setDescription('Show or set 24/7 mode')
+        .setDescriptionLocalization('th', 'ดูหรือตั้งค่าโหมด 24/7')
         .setContexts([0])
+        .addBooleanOption(o=>o.setName('enable')
+            .setDescription('On or off. Leave empty to see the current state')
+            .setDescriptionLocalization('th', 'เปิดหรือปิด ไม่ใส่เพื่อดูสถานะปัจจุบัน')
+            .setRequired(false)
+        )
     )
 ];
 
@@ -588,8 +593,13 @@ const commands = [
                 .setDescriptionLocalization('th', 'แสดงคิวทั้งหมด')
             )
         ).addSubcommand(s=>s.setName('247')
-            .setDescription('Toggle 24/7 mode')
-            .setDescriptionLocalization('th', 'โหมด 24/7')
+            .setDescription('Show or set 24/7 mode')
+            .setDescriptionLocalization('th', 'ดูหรือตั้งค่าโหมด 24/7')
+            .addBooleanOption(o=>o.setName('enable')
+                .setDescription('On or off. Leave empty to see the current state')
+                .setDescriptionLocalization('th', 'เปิดหรือปิด ไม่ใส่เพื่อดูสถานะปัจจุบัน')
+                .setRequired(false)
+            )
         )
 	),
 ];

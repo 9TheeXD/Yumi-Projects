@@ -1,9 +1,18 @@
 import chalk from "chalk";
-import { Client, MessageFlags, TextDisplayBuilder } from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Client, ContainerBuilder, MessageFlags } from "discord.js";
 
 // Messages for users. Never show raw error text or codes: say what happened and what to do.
-type Text = { th: string; en: string };
-const pick = (t: Text, locale?: string | null) => (locale === 'th' ? t.th : t.en);
+export type Text = { th: string; en: string };
+export const pick = (t: Text, locale?: string | null) => (locale === 'th' ? t.th : t.en);
+
+export const COLOR = { info: 0x5865f2, ok: 0x57f287, warn: 0xfee75c, bad: 0xed4245 } as const;
+
+/** A Components V2 card for a short message: accent bar, text and an optional button. */
+export function card(text: string, color: number = COLOR.info, button?: ButtonBuilder) {
+  const c = new ContainerBuilder().setAccentColor(color).addTextDisplayComponents(t => t.setContent(text));
+  if (button) c.addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(button));
+  return c;
+}
 
 const REPLY: [RegExp, Text][] = [
   [/voice connection is not established|missing session id|missing connection endpoint/i, {
@@ -54,6 +63,27 @@ export const NOTICE = {
     th: `ลองเล่นเพลง **${t(title)}** ใหม่หลายครั้งแล้วยังไม่ได้ เลยหยุดไว้ก่อน ลองเปิดใหม่ด้วย /play หรือเลือกเพลงอื่น`,
     en: `Tried to play **${t(title)}** several times without luck, so playback is paused. Try /play again or pick another song.`,
   }),
+  resumeButton: (): Text => ({ th: 'เล่นต่อ', en: 'Resume' }),
+  resuming: (title: string): Text => ({
+    th: `กำลังเล่นเพลง **${t(title)}** และคิวเดิมต่อ`,
+    en: `Resuming **${t(title)}** and the queue.`,
+  }),
+  nothingToResume: (): Text => ({
+    th: 'ไม่มีเพลงที่ค้างอยู่ให้เล่นต่อแล้ว ใช้ /play เพื่อเปิดเพลงใหม่',
+    en: 'There is nothing left to resume. Use /play to start a song.',
+  }),
+  resumeNoPlayer: (): Text => ({
+    th: 'บอทไม่ได้อยู่ในห้องเสียงแล้ว ใช้ /play เพื่อเปิดเพลงใหม่',
+    en: 'The bot is no longer in a voice channel. Use /play to start a song.',
+  }),
+  status247: (on: boolean): Text => ({
+    th: `โหมด 24/7 ตอนนี้: **${on ? 'เปิด' : 'ปิด'}** (ใช้ \`/247 enable:${on ? 'ปิด' : 'เปิด'}\` เพื่อ${on ? 'ปิด' : 'เปิด'})`,
+    en: `24/7 mode is **${on ? 'on' : 'off'}** (use \`/247 enable:${on ? 'False' : 'True'}\` to turn it ${on ? 'off' : 'on'}).`,
+  }),
+  set247: (on: boolean): Text => ({
+    th: `${on ? 'เปิด' : 'ปิด'}โหมด 24/7 แล้ว${on ? ' บอทจะอยู่ในห้องเสียงแม้ไม่มีเพลง' : ''}`,
+    en: `24/7 mode is now **${on ? 'on' : 'off'}**.${on ? ' The bot stays in the voice channel even with nothing playing.' : ''}`,
+  }),
   voiceTrouble: (): Text => ({
     th: 'ระบบเสียงของ Discord มีปัญหาชั่วคราว บอทกำลังต่อใหม่และจะเล่นเพลงต่อให้เอง',
     en: 'Discord voice is having a short problem. The bot is reconnecting and will continue the song.',
@@ -80,7 +110,7 @@ export const NOTICE = {
 const lastSent = new Map<string, number>();
 
 /** Posts a notice in the player's text channel, in the server's language (Thai or English). */
-export async function notify(client: Client, guildId: string, textId: string | undefined | null, kind: string, text: Text) {
+export async function notify(client: Client, guildId: string, textId: string | undefined | null, kind: string, text: Text, opts: { color?: number; resume?: boolean } = {}) {
   if (!textId) return;
   const key = `${guildId}:${kind}`;
   const now = Date.now();
@@ -90,7 +120,8 @@ export async function notify(client: Client, guildId: string, textId: string | u
     const channel = await client.channels.fetch(textId);
     if (!channel?.isSendable()) return;
     const locale = client.guilds.cache.get(guildId)?.preferredLocale;
-    await channel.send({ components: [new TextDisplayBuilder().setContent(pick(text, locale))], flags: MessageFlags.IsComponentsV2 });
+    const button = opts.resume ? new ButtonBuilder().setCustomId('music_resume_failed').setEmoji('▶️').setLabel(pick(NOTICE.resumeButton(), locale)).setStyle(ButtonStyle.Success) : undefined;
+    await channel.send({ components: [card(pick(text, locale), opts.color ?? COLOR.warn, button)], flags: MessageFlags.IsComponentsV2 });
   } catch (e) {
     console.error(chalk.bold('[Notice]'), `Could not post notice in ${guildId}:`, (e as Error).message);
   }

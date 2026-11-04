@@ -1,4 +1,4 @@
-import { friendlyError } from "../utils/friendly.js";
+import { COLOR, NOTICE, card, friendlyError, pick } from "../utils/friendly.js";
 import { CacheType, ChatInputCommandInteraction, Client, CommandInteraction, DiscordAPIError, Interaction, MessageFlags, TextDisplayBuilder, underline } from "discord.js";
 import chalk from "chalk";
 import { editPStatus, playerStatus_component, sendPStatus } from "../utils/messages.js";
@@ -396,6 +396,14 @@ if(interaction.guild){
       }
       return;
     }if(sub === '247'){
+      const locale = interaction.locale;
+      const show = (text: string, color: number) => interaction.editReply({ components: [card(text, color)], flags: MessageFlags.IsComponentsV2 });
+      const enable = interaction.options.getBoolean('enable');
+      // No option: only show the current state. It needs no voice channel and changes nothing.
+      if(enable === null){
+        const on = kazagumo.getPlayer(interaction.guild.id)?.[247] === true;
+        return show(pick(NOTICE.status247(on), locale), on ? COLOR.ok : COLOR.info);
+      };
       if(!member.voice.channel){
         return interaction.editReply({ content: iE.join_vc_first_message[interaction.locale] });
       };
@@ -409,12 +417,12 @@ if(interaction.guild){
         if(player.voiceId != member.voice.channelId){
           return interaction.editReply({ content: iE.must_in_same_vc[interaction.locale] });
         };
-        player[247] = !(player[247] || false);
+        player[247] = enable;
 
         await wait(300);
         await sendPStatus(client, kazagumo, player);
         kazagumo.emit('playerUpdate', player);
-        await interaction.editReply(`Set 24/7 mode to \`${player[247] ? 'enabled' : 'disabled'}\``);
+        await show(pick(NOTICE.set247(enable), locale), enable ? COLOR.ok : COLOR.info);
       }catch(e: any){
         console.error(e);
         await interaction.editReply(friendlyError(e, interaction.locale));  /// lang
