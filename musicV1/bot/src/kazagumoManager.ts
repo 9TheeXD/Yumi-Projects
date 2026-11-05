@@ -113,6 +113,12 @@ export default class KazagumoManager {
     const retryLater = (p: KazagumoPlayer, track: KazagumoTrack, voice: boolean) => {
       const now = Date.now();
       let delay = 15_000;
+      // A failed song ends with a loadFailed end, and Kazagumo then plays the next song in the queue
+      // even when the failed one is looped. Hold the queue back so only the looped song is retried
+      // (guild 1136970225452068864, 2026-11-04 13:12 UTC: the loop moved on to the next song).
+      const hold = p.loop === 'track' ? [...p.queue] : [];
+      if(hold.length)p.queue.clear();
+      const giveBack = () => { if(hold.length && kazagumo.players.get(p.guildId) === p)p.queue.push(...hold); };
       if(voice){
         p.voiceFailSince ??= now;
         p.voiceFails = (p.voiceFails ?? 0) + 1;
@@ -122,6 +128,7 @@ export default class KazagumoManager {
           p.voiceFails = 0;
           p.failedTrack = track;
           void notify(client, p.guildId, p.textId, 'gaveup', NOTICE.trackGaveUp(track.title), { color: COLOR.bad, resume: true });
+          setTimeout(giveBack, 5_000);
           return;
         }
         delay = Math.min(30_000 * 2 ** (p.voiceFails - 1), VOICE_RETRY_MAX_DELAY);
@@ -131,6 +138,7 @@ export default class KazagumoManager {
           console.warn(headKE, `Giving up on ${track.title} in ${chalk.bold(p.guildId)}`);
           p.failedTrack = track;
           void notify(client, p.guildId, p.textId, 'gaveup', NOTICE.trackGaveUp(track.title), { color: COLOR.bad, resume: true });
+          setTimeout(giveBack, 5_000);
           return;
         }
       }
@@ -149,7 +157,7 @@ export default class KazagumoManager {
           p.queue.unshift(track);
           await p.play();
         }catch(err){ console.error(headKE, 'Retry error:', (err as Error).message); }
-        finally{ p.recovering = false; };
+        finally{ p.recovering = false; giveBack(); };
       }, delay);
     };
 
