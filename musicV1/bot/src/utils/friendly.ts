@@ -63,6 +63,8 @@ export const NOTICE = {
     th: `ลองเล่นเพลง **${t(title)}** ใหม่หลายครั้งแล้วยังไม่ได้ เลยหยุดไว้ก่อน ลองเปิดใหม่ด้วย /play หรือเลือกเพลงอื่น`,
     en: `Tried to play **${t(title)}** several times without luck, so playback is paused. Try /play again or pick another song.`,
   }),
+  playerFailed: (): Text => ({ th: 'มีปัญหา ไม่สามารถเล่นเพลงได้', en: 'Problem: this song cannot be played' }),
+  cardFailed: (): Text => ({ th: 'ไม่สามารถเล่นได้', en: 'Cannot be played' }),
   resumeButton: (): Text => ({ th: 'เล่นต่อ', en: 'Resume' }),
   resuming: (title: string): Text => ({
     th: `กำลังเล่นเพลง **${t(title)}** และคิวเดิมต่อ`,

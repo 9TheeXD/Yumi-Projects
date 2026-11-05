@@ -1,6 +1,6 @@
 import { Client } from "discord.js";
 import { Connectors, Constants, Node, NodeOption, Track } from "shoukaku";
-import { findAlternative, portTrack, recordPlayback } from "./music/resolver.js";
+import { portTrack, recordPlayback } from "./music/resolver.js";
 import Env from "./utils/env.js";
 import chalk from "chalk";
 import { Kazagumo, KazagumoPlayer, KazagumoTrack, Plugins } from "kazagumo";
@@ -105,6 +105,22 @@ export default class KazagumoManager {
       const channel = p.voiceId ? client.guilds.cache.get(p.guildId)?.channels.cache.get(p.voiceId) : undefined;
       return channel?.isVoiceBased() ? channel.members.filter(m => !m.user.bot).size : 0;
     };
+    const MAX_FAILED_SONGS = 3;
+    // Stop on a song that cannot be played: show it on the player card with a Resume button and keep
+    // the queue. The failed end would make Kazagumo play the next song, so the queue is held back
+    // for a moment (and the player kept from being destroyed) until that end has passed.
+    const giveUp = (p: KazagumoPlayer, track: KazagumoTrack, holdQueue: boolean) => {
+      p.failedTrack = track;
+      p.failedSongs = undefined;
+      const hold = holdQueue ? [...p.queue] : [];
+      if(hold.length){ p.queue.clear(); p.recovering = true; }
+      void notify(client, p.guildId, p.textId, 'gaveup', NOTICE.trackGaveUp(track.title), { color: COLOR.bad, resume: true });
+      void sendPStatus(client, kazagumo, p, { from: 'playback failed' });
+      if(hold.length)setTimeout(() => {
+        p.recovering = false;
+        if(kazagumo.players.get(p.guildId) === p)p.queue.push(...hold);
+      }, 5_000);
+    };
     // Song or voice failed and every quick fix was used. Wait, then play the same song again
     // (rejoining the channel first for voice trouble). Song failures give up after 3 failures in
     // RETRY_WINDOW. Voice failures are not the song's fault: keep retrying with a growing delay
@@ -126,8 +142,7 @@ export default class KazagumoManager {
           console.warn(headKE, `Giving up on ${track.title} in ${chalk.bold(p.guildId)} after ${Math.round((now - p.voiceFailSince) / 60_000)} min of voice failures`);
           p.voiceFailSince = undefined;
           p.voiceFails = 0;
-          p.failedTrack = track;
-          void notify(client, p.guildId, p.textId, 'gaveup', NOTICE.trackGaveUp(track.title), { color: COLOR.bad, resume: true });
+          giveUp(p, track, false);
           setTimeout(giveBack, 5_000);
           return;
         }
@@ -136,8 +151,7 @@ export default class KazagumoManager {
         p.failTimes = [...(p.failTimes ?? []).filter(at => now - at < RETRY_WINDOW), now];
         if(p.failTimes.length > 3){
           console.warn(headKE, `Giving up on ${track.title} in ${chalk.bold(p.guildId)}`);
-          p.failedTrack = track;
-          void notify(client, p.guildId, p.textId, 'gaveup', NOTICE.trackGaveUp(track.title), { color: COLOR.bad, resume: true });
+          giveUp(p, track, false);
           setTimeout(giveBack, 5_000);
           return;
         }
@@ -261,6 +275,15 @@ export default class KazagumoManager {
       const error = (data as { exception?: { message?: string } })?.exception?.message || 'unknown';
       console.error(headKE, `Track failed in ${chalk.bold(p.guildId)}: ${track?.title} (${track?.sourceName}):`, error);
       if(!track)return;
+      // Songs failing one after the other mean the node or Discord is at fault, not the songs. Going on
+      // would skip the whole queue, so stop at the third song, keep the queue and wait for Resume.
+      p.failedSongs ??= new Set();
+      p.failedSongs.add(track.uri || track.identifier);
+      if(p.failedSongs.size >= MAX_FAILED_SONGS){
+        console.warn(headKE, `${p.failedSongs.size} songs failed in a row in ${chalk.bold(p.guildId)}, stopping on ${track.title}`);
+        giveUp(p, track, true);
+        return;
+      }
       // Retry marks expire after RETRY_WINDOW. A looped song is the same track object for hours:
       // a voice hiccup hours later must get the same recovery as the first one.
       const tried = (key: string) => { const at = (track as unknown as Record<string, unknown>)[key]; return typeof at === 'number' && Date.now() - at < RETRY_WINDOW; };
@@ -272,21 +295,6 @@ export default class KazagumoManager {
       // (it was 1, and the next timeout then swapped the song for another upload).
       p.startTimeouts = (p.startTimeouts ?? []).filter(at => Date.now() - at < RETRY_WINDOW);
       const startTimeout = /playerStateChange timed out|Voice playback state timed out|UDP secretKey missing/i.test(error);
-      // The same song keeps not starting (a slow SoundCloud stream): play its Spotify version instead.
-      // Spotify ranks first in the search, and the official upload is what the user would pick.
-      if(startTimeout && p.startTimeouts.length >= 2 && track.sourceName !== 'spotify' && !tried('spotifyAlt')){
-        mark('spotifyAlt');
-        try{
-          const alt = await findAlternative(kazagumo, track, p.shoukaku.node.name);
-          if(alt?.sourceName === 'spotify'){
-            p.startTimeouts = [];
-            console.log(headK, `Spotify instead of ${chalk.bold(track.title)} (${track.sourceName}): ${alt.title}`);
-            p.queue.unshift(alt);
-            if(!p.playing && !p.queue.current)await p.play();
-            return;
-          }
-        }catch(err){ console.error(headKE, 'Spotify fallback error:', (err as Error).message); }
-      }
       if(startTimeout && p.startTimeouts.length < 3){
         p.startTimeouts.push(Date.now());
         console.warn(headKE, `Voice start timeout in ${chalk.bold(p.guildId)}, replaying ${track.title}`);
@@ -318,28 +326,10 @@ export default class KazagumoManager {
         return retryLater(p, track, true);
       }
       recordPlayback(track.sourceName, error);
-      // One retry per song, on a different source. Not for a looped song: the user asked for that
-      // exact song, and another upload would replace it without a word.
-      if(p.loop !== 'track' && !tried('altRetry')){
-        p.recovering = true;
-        try{
-          const alt = await findAlternative(kazagumo, track, p.shoukaku.node.name);
-          if(alt){
-            (alt as unknown as Record<string, unknown>).altRetry = Date.now();
-            console.log(headK, `Fallback for ${chalk.bold(track.title)}: ${alt.title} (${alt.sourceName})`);
-            p.queue.unshift(alt);
-            if(!p.playing && !p.queue.current)await p.play();
-            return;
-          }
-        }catch(err){
-          console.error(headKE, 'Fallback error:', err);
-        }finally{
-          p.recovering = false;
-        };
-      }
-      // Nothing worked. A looped song is what the user wants to hear: keep the player and try again later.
+      // Nothing worked. A looped song is what the user wants to hear: keep the player, show the failure
+      // on the player card and try again later. No other source is searched for the song.
       if(p.loop === 'track')return retryLater(p, track, false);
-      // Kazagumo moves on to the next song by itself.
+      // Loop off or loop queue: Kazagumo moves on to the next song by itself (see failedSongs above).
       void notify(client, p.guildId, p.textId, 'track', p.queue.length ? NOTICE.trackSkipped(track.title) : NOTICE.trackFailedEnd(track.title));
  });kazagumo.on('playerStuck', async(p)=>{
       console.warn(headKE, `Track stuck in ${chalk.bold(p.guildId)}: ${p.queue.current?.title}`);
@@ -376,6 +366,8 @@ export default class KazagumoManager {
       console.debug({playing: player.playing, paused: player.paused});
 
       player.latestUpdate = Date.now();
+      // 10 s of playback: the node works, so earlier failures do not count towards stopping.
+      if(player.playing && player.shoukaku.position > 10_000)player.failedSongs = undefined;
       // Nothing to play: autoDisconnect leaves after a few idle minutes. Leaving right away dropped
       // players whose looped song failed once, before any recovery could run.
       if(player.queue.current || player.queue.size || player.recovering || player.restoring)player.idleSince = undefined;

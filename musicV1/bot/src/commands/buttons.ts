@@ -2,6 +2,7 @@ import { COLOR, NOTICE, card, friendlyError, pick } from "../utils/friendly.js";
 import chalk from 'chalk';
 import { Client, CacheType, Interaction, DiscordAPIError, MessageFlags, ButtonInteraction, ModalBuilder, TextInputBuilder, ActionRowBuilder, TextInputStyle } from 'discord.js';
 import { editPStatus, playerStatus_component, sendPStatus } from '../utils/messages.js';
+import { resumeFailedTrack } from '../utils/function.js';
 import { Kazagumo } from 'kazagumo';
 import Env from '../utils/env.js';
 import { InteractionElements } from '../utils/interactionElements.js';
@@ -31,30 +32,14 @@ if(interaction.guild && interaction.customId.startsWith('music')){
 	if(interaction.customId === 'music_resume_failed'){
     const locale = interaction.guildLocale || interaction.locale;
     const say = (text: string, color: number) => interaction.update({ components: [card(text, color)], flags: MessageFlags.IsComponentsV2 });
-    const track = player?.failedTrack;
     if(!player)return say(pick(NOTICE.resumeNoPlayer(), locale), COLOR.bad);
-    if(!track){
-      // Already resumed (or playing something): nothing left to play again.
-      return say(pick(NOTICE.nothingToResume(), locale), COLOR.warn);
-    };
+    // Already resumed (or playing something): nothing left to play again.
+    if(!player.failedTrack)return say(pick(NOTICE.nothingToResume(), locale), COLOR.warn);
     try{
-      player.failedTrack = undefined;
-      player.failTimes = [];
-      player.voiceFails = 0;
-      player.voiceFailSince = undefined;
-      player.recovering = false;
-      if(player.voiceId){
-        const conn = kazagumo.shoukaku.connections.get(player.guildId);
-        kazagumo.KazagumoOptions.send(player.guildId, { op: 4, d: { guild_id: player.guildId, channel_id: player.voiceId, self_mute: conn?.muted ?? false, self_deaf: conn?.deafened ?? false } });
-        await new Promise(r => setTimeout(r, 3000));
-      };
-      player.queue.unshift(track);
-      player.pause(false);
-      await player.play();
-      return await say(pick(NOTICE.resuming(track.title.replace(/[*_`~|]/g, '').slice(0, 80)), locale), COLOR.ok);
+      const track = await resumeFailedTrack(kazagumo, player);
+      return await say(pick(NOTICE.resuming((track?.title ?? '').replace(/[*_`~|]/g, '').slice(0, 80)), locale), COLOR.ok);
     }catch(err){
       console.error(err);
-      player.failedTrack = track;
       return await interaction.reply({ content: friendlyError(err, interaction.locale), flags: MessageFlags.Ephemeral });
     };
   };if(interaction.customId === 'music_destroy'){
@@ -75,6 +60,11 @@ if(interaction.guild && interaction.customId.startsWith('music')){
 	};if(interaction.customId === 'music_play'){
     if(!player)return expired(interaction);
     try{
+      // The player card shows Resume while a song cannot be played: play that song again.
+      if(player.failedTrack){
+        await resumeFailedTrack(kazagumo, player);
+        return await editPStatus(interaction, kazagumo, player);
+      };
       if(!player.paused && player.playing){
         await interaction.reply({ content: iE.is_now_playing_message[interaction.guildLocale || interaction.locale], flags: MessageFlags.Ephemeral });
       };
@@ -147,6 +137,8 @@ if(interaction.guild && interaction.customId.startsWith('music')){
     if(!player){
       return;
     }try{
+      // The user moves on from a song that could not be played.
+      player.failedTrack = undefined;
       player.skip();
 
       // return await sendPStatus(client, player);

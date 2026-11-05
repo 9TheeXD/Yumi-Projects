@@ -4,6 +4,7 @@ import { emoji, emojiToString, imageNone } from "global";
 import chalk from "chalk";
 import { InteractionElements, Locale } from "./interactionElements.js";
 import { createMusicCard } from "./function.js";
+import { NOTICE, pick } from "./friendly.js";
 import { User } from "discord.js";
 
 export function formatTime(seconds: number): string {
@@ -39,10 +40,10 @@ function getProgressBar(current: number, total: number, barLength = 20): string 
 const cardCache = new Map<string, { key: string; buffer: Buffer }>();
 const sentCard = new Map<string, string>();
 
-function cardKey(track: Track | undefined) {
+function cardKey(track: Track | undefined, failed = '') {
   if (!track) return 'none';
   const req = track.requester as User | undefined;
-  return `${track.identifier}|${track.uri}|${req?.id ?? ''}`;
+  return `${track.identifier}|${track.uri}|${req?.id ?? ''}|${failed}`;
 }
 
 // `files` for a message edit: the card when the message shows another track (or is unknown), else nothing.
@@ -59,7 +60,9 @@ export function markCardSent(messageId: string | undefined, key: string) {
 
 export const playerStatus_component = async(player: Player, client: Client, locale: Locale = 'en-US')=>{
   const iE = new InteractionElements;
-  const now   = player.queue?.current || undefined;
+  // A song that could not be played stays on the card (with a red warning layer) until it is resumed or replaced.
+  const failedTrack = player.queue?.current ? undefined : player.failedTrack;
+  const now   = player.queue?.current || failedTrack || undefined;
   const prev  = player.queue?.previous || undefined;
   const queue = player.queue?.slice((player.queue.indexOf(player.queue.current!) || 0) + 1) || undefined;
   // console.log(' \\_ .playing.', player.playing);
@@ -78,10 +81,11 @@ export const playerStatus_component = async(player: Player, client: Client, loca
 
   player.queue.all = allQ;
 
-  const key = cardKey(now);
+  const failedText = failedTrack ? pick(NOTICE.cardFailed(), locale) : undefined;
+  const key = cardKey(now, failedText);
   let card = cardCache.get(player.guildId);
   if (card?.key !== key) {
-    card = { key, buffer: await createMusicCard({ track: now, duration: formatTime((now?.length || 0) / 1000) }) };
+    card = { key, buffer: await createMusicCard({ track: now, duration: formatTime((now?.length || 0) / 1000), failed: failedText }) };
     cardCache.set(player.guildId, card);
   }
   const buffer = card.buffer;
@@ -108,7 +112,9 @@ export const playerStatus_component = async(player: Player, client: Client, loca
       // .setAccentColor(!now && !queue ? 0xff0000 : player.playing ? 0x00ff00 : 0xffff00)
       // .setAccentColor(0x1f1f1f)
       .addTextDisplayComponents(t=>t.setContent(`${
-        (!now && (!queue || queue.length == 0))
+        failedTrack
+          ? `### ⚠️  ${pick(NOTICE.playerFailed(), locale)}`
+          : (!now && (!queue || queue.length == 0))
           ? `### ${emojiToString(emoji.night_sleep)}  ${iE.music_message[locale].noSongInQueue}`
           : (player.playing && !player.paused)
               ? `### ${emojiToString(emoji.cd)}  ${iE.music_message[locale].playingSong}`
@@ -120,7 +126,7 @@ export const playerStatus_component = async(player: Player, client: Client, loca
         .addComponents(
           new ButtonBuilder().setCustomId(false ? 'music_undo_destroy' : 'music_destroy').setEmoji(false ? emoji.undo : emoji.m_stop).setStyle(ButtonStyle.Secondary).setDisabled(false),
           new ButtonBuilder().setCustomId('music_prev').setEmoji(emoji.m_next_l).setStyle(ButtonStyle.Secondary).setDisabled(false),
-          new ButtonBuilder().setCustomId(player.playing ? 'music_pause' : 'music_play').setEmoji(player.playing ? emoji.m_pause : emoji.m_play).setStyle(ButtonStyle.Secondary).setDisabled(false),
+          new ButtonBuilder().setCustomId(player.playing && !failedTrack ? 'music_pause' : 'music_play').setEmoji(player.playing && !failedTrack ? emoji.m_pause : emoji.m_play).setStyle(ButtonStyle.Secondary).setDisabled(false),
           new ButtonBuilder().setCustomId('music_next').setEmoji(emoji.m_next_r).setStyle(ButtonStyle.Secondary).setDisabled(false),
           new ButtonBuilder().setCustomId(repeatId).setEmoji(repeatEmoji).setStyle(ButtonStyle.Secondary).setDisabled(false)
         )

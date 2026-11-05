@@ -2,7 +2,7 @@ import chalk from "chalk";
 import { ContainerBuilder } from "discord.js";
 import { Client, TextDisplayBuilder } from "discord.js";
 import fs from "fs";
-import { Kazagumo, KazagumoTrack } from "kazagumo";
+import { Kazagumo, KazagumoPlayer, KazagumoTrack } from "kazagumo";
 import path from "path";
 import { setTimeout as wait } from 'timers/promises';
 import { sendPStatus } from "./messages.js";
@@ -314,6 +314,8 @@ export async function drawStatus(
 export async function createMusicCard(data:{
   track:any
   duration:string
+  // Set when the song cannot be played: the card gets a red layer, a warning icon and this text.
+  failed?: string
 }){
 
   const canvas = createCanvas(800,250)
@@ -363,5 +365,61 @@ export async function createMusicCard(data:{
   ctx.font = "18px Sans, Noto Sans Thai"
   drawWrapText(ctx,`Requested by: ${(data.track?.requester as User)?.globalName || (data.track?.requester as User)?.username || "unknown"}`,250,y + 38,520,22,1)
 
+  if(data.failed){
+    ctx.fillStyle = "rgba(220,38,38,0.74)"
+    ctx.fillRect(0,0,800,250)
+    // warning triangle with an exclamation mark
+    const cx = 400, top = 28
+    ctx.fillStyle = "#fff"
+    ctx.beginPath()
+    ctx.moveTo(cx, top)
+    ctx.lineTo(cx + 62, top + 108)
+    ctx.lineTo(cx - 62, top + 108)
+    ctx.closePath()
+    ctx.lineJoin = "round"
+    ctx.lineWidth = 14
+    ctx.strokeStyle = "#fff"
+    ctx.stroke()
+    ctx.fill()
+    ctx.fillStyle = "#dc2626"
+    ctx.fillRect(cx - 6, top + 36, 12, 38)
+    ctx.beginPath()
+    ctx.arc(cx, top + 90, 7, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = "#fff"
+    ctx.font = "bold 40px Sans, Noto Sans Thai"
+    ctx.textAlign = "center"
+    ctx.fillText(data.failed, cx, 208)
+    ctx.textAlign = "start"
+  }
+
   return canvas.toBuffer("image/png")
+}
+
+
+/** Plays the song that could not be played again, with the queue behind it. */
+export async function resumeFailedTrack(kazagumo: Kazagumo, player: KazagumoPlayer) {
+  const track = player.failedTrack;
+  if (!track) return null;
+  player.failedTrack = undefined;
+  player.failedSongs = undefined;
+  player.failTimes = [];
+  player.startTimeouts = [];
+  player.voiceFails = 0;
+  player.voiceFailSince = undefined;
+  player.recovering = false;
+  try {
+    if (player.voiceId) {
+      const conn = kazagumo.shoukaku.connections.get(player.guildId);
+      kazagumo.KazagumoOptions.send(player.guildId, { op: 4, d: { guild_id: player.guildId, channel_id: player.voiceId, self_mute: conn?.muted ?? false, self_deaf: conn?.deafened ?? false } });
+      await wait(3000);
+    }
+    player.queue.unshift(track);
+    player.pause(false);
+    await player.play();
+    return track;
+  } catch (e) {
+    player.failedTrack = track;
+    throw e;
+  }
 }

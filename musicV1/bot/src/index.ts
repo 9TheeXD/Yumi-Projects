@@ -102,6 +102,8 @@ declare module 'discord.js' {
     failedTrack?: KazagumoTrack;
     // Times the song did not start within 15 s, within the retry window.
     startTimeouts?: number[];
+    // Songs that failed since something last played for 10 s (see MAX_FAILED_SONGS).
+    failedSongs?: Set<string>;
   }
   interface KazagumoEvents {
     debug: [message: string];
