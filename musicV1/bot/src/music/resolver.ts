@@ -22,6 +22,8 @@ export type MusicSearchOptions = {
   exclude?: string[];
   // Source keys to try before the configured order.
   prefer?: string[];
+  // Accept search results that only partly match the query (a fallback for a song whose title came from a fan upload).
+  loose?: boolean;
 };
 
 // Errors that belong to one video, not to YouTube blocking us. They must not trip the breaker.
@@ -31,6 +33,13 @@ export function sourceKeyOf(sourceName: string | undefined) {
   if (!sourceName) return 'unknown';
   if (sourceName.startsWith('youtube')) return 'youtube';
   return SOURCES[sourceName]?.key ?? sourceName;
+}
+
+// Position of a source in the configured order: Spotify first, then SoundCloud, and so on.
+function sourceRank(sourceName: string | undefined) {
+  const key = sourceKeyOf(sourceName);
+  const i = musicConfig().order.findIndex(id => SOURCES[id]?.key === key);
+  return i < 0 ? musicConfig().order.length : i;
 }
 
 function urlSourceKey(url: string) {
@@ -251,6 +260,9 @@ async function autocomplete(kazagumo: Kazagumo, node: Node, query: string, opts:
     keys.forEach(k => seen.add(k));
     return true;
   });
+  // Cached results of earlier searches came first whatever their source. Keep the configured order
+  // (Spotify first); the sort is stable, so each source keeps its own ranking.
+  all.sort((a, b) => sourceRank(a.info.sourceName) - sourceRank(b.info.sourceName));
   return { type: 'SEARCH', tracks: wrap(kazagumo, all.slice(0, 10), opts.requester) };
 }
 
@@ -304,7 +316,13 @@ export async function musicSearch(kazagumo: Kazagumo, query: string, opts: Music
   const queryNorm = normalizeQuery(query);
   if (!queryNorm) return empty();
 
-  const cached = await fromCache(kazagumo, node, queryNorm, opts.requester, exclude);
+  // A cached result from a source that ranks below Spotify does not stop a Spotify search; the new
+  // result replaces the cache row, and a Spotify miss is remembered (negative cache) so it is not repeated.
+  const cachedRow = cacheGet(queryNorm);
+  const spotifyFirst = !!cachedRow && !/^https?:\/\//i.test(queryNorm) && !exclude.includes('spotify') && sourceEnabled('spotify')
+    && nodeSupports(node, SOURCES.spotify.manager) && !negativeHas(queryNorm, 'spotify') && breakerAllow('spotify')
+    && sourceRank(cachedRow.source) > sourceRank('spotify');
+  const cached = spotifyFirst ? null : await fromCache(kazagumo, node, queryNorm, opts.requester, exclude);
   if (cached) return cached;
 
   if (!userAllow(opts.userId, 'play')) return empty('rate_limited');
@@ -339,7 +357,7 @@ export async function musicSearch(kazagumo: Kazagumo, query: string, opts: Music
   }
 
   const order = opts.prefer ? [...opts.prefer, ...musicConfig().order.filter(id => !opts.prefer!.includes(id))] : musicConfig().order;
-  return searchSources(kazagumo, node, queryNorm, order, true, opts.requester, exclude);
+  return searchSources(kazagumo, node, queryNorm, order, !opts.loose, opts.requester, exclude);
 }
 
 const PLAYLIST_MAX = Number(Env('MUSIC_PLAYLIST_MAX')) || 500;
@@ -363,7 +381,8 @@ export async function findAlternative(kazagumo: Kazagumo, track: KazagumoTrack, 
   // Spotify / Apple Music / Deezer carry metadata only: the same official song is on YouTube Music.
   // SoundCloud first would often pick a cover, a remix or a 30 s preview.
   const prefer = CATALOG_SOURCES.has(track.sourceName) ? ['youtube_music'] : undefined;
-  const res = await musicSearch(kazagumo, q, { requester: track.requester, nodeName, exclude: [key], prefer }).catch(() => null);
+  // Spotify is asked first (configured order) and may match loosely: the failed title often comes from a fan upload.
+  const res = await musicSearch(kazagumo, q, { requester: track.requester, nodeName, exclude: [key], prefer: prefer ?? ['spotify'], loose: true }).catch(() => null);
   return res?.tracks[0] ?? null;
 }
 

@@ -271,7 +271,23 @@ export default class KazagumoManager {
       // A looped song can hit this every few minutes for hours, so the limit is 3 per RETRY_WINDOW
       // (it was 1, and the next timeout then swapped the song for another upload).
       p.startTimeouts = (p.startTimeouts ?? []).filter(at => Date.now() - at < RETRY_WINDOW);
-      if(/playerStateChange timed out|Voice playback state timed out|UDP secretKey missing/i.test(error) && p.startTimeouts.length < 3){
+      const startTimeout = /playerStateChange timed out|Voice playback state timed out|UDP secretKey missing/i.test(error);
+      // The same song keeps not starting (a slow SoundCloud stream): play its Spotify version instead.
+      // Spotify ranks first in the search, and the official upload is what the user would pick.
+      if(startTimeout && p.startTimeouts.length >= 2 && track.sourceName !== 'spotify' && !tried('spotifyAlt')){
+        mark('spotifyAlt');
+        try{
+          const alt = await findAlternative(kazagumo, track, p.shoukaku.node.name);
+          if(alt?.sourceName === 'spotify'){
+            p.startTimeouts = [];
+            console.log(headK, `Spotify instead of ${chalk.bold(track.title)} (${track.sourceName}): ${alt.title}`);
+            p.queue.unshift(alt);
+            if(!p.playing && !p.queue.current)await p.play();
+            return;
+          }
+        }catch(err){ console.error(headKE, 'Spotify fallback error:', (err as Error).message); }
+      }
+      if(startTimeout && p.startTimeouts.length < 3){
         p.startTimeouts.push(Date.now());
         console.warn(headKE, `Voice start timeout in ${chalk.bold(p.guildId)}, replaying ${track.title}`);
         void replayAfterEnd(p, track, { otherNode: !/UDP secretKey/i.test(error) });
