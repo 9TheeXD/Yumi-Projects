@@ -1,0 +1,28 @@
+import type { Strings } from "./core.js";
+
+export const en: Strings = {
+  errVoice: "Couldn't join the voice channel. Discord voice may be having a short outage, please try again in a moment.",
+  errNode: 'The music system is not ready yet, please try again in a moment.',
+  errPerm: "The bot doesn't have permission to join or speak in this voice channel.",
+  errSlow: 'The music system is slow right now, please try again in a moment.',
+  errGeneric: 'Something went wrong, please try again in a moment.',
+  trackSkipped: "**{title}** can't be played right now, skipped to the next song.",
+  trackFailedEnd: "**{title}** can't be played right now and the queue is empty. Use /play to pick another song.",
+  trackRetry: '**{title}** stopped unexpectedly. The bot will try to play it again in a few seconds.',
+  trackGaveUp: 'Tried to play **{title}** several times without luck, so playback is paused. Try /play again or pick another song.',
+  playerFailed: 'Problem: this song cannot be played',
+  cardFailed: 'Cannot be played',
+  resumeButton: 'Resume',
+  resuming: 'Resuming **{title}** and the queue.',
+  nothingToResume: 'There is nothing left to resume. Use /play to start a song.',
+  resumeNoPlayer: 'The bot is no longer in a voice channel. Use /play to start a song.',
+  status247On: '24/7 mode is **on** (use `/247 enable:False` to turn it off).',
+  status247Off: '24/7 mode is **off** (use `/247 enable:True` to turn it on).',
+  set247On: '24/7 mode is now **on**. The bot stays in the voice channel even with nothing playing.',
+  set247Off: '24/7 mode is now **off**.',
+  voiceTrouble: 'Discord voice is having a short problem. The bot is reconnecting and will continue the song.',
+  rejoined: 'The bot dropped out of the voice channel and came back to continue. Use the stop button if you want it to stop.',
+  left: 'The bot was removed from the voice channel, so playback stopped. Use /play to start again.',
+  restoreFailed: "The bot restarted and couldn't rejoin the voice channel. Use /play to continue.",
+  idleLeft: 'Nothing has played for a while, so the bot left the voice channel. Use /play to start again.',
+};

@@ -23,8 +23,9 @@ export default class Messages {
     if (!query) return message.reply("⚠️ ใส่ชื่อเพลงด้วย!");
 
     const member = message.member;
+    const th = message.guild?.preferredLocale === 'th';
     if (!member?.voice.channel) {
-      return message.reply("❌ คุณต้องอยู่ใน voice channel ก่อน!");
+      return message.reply(th ? "❌ คุณต้องอยู่ใน voice channel ก่อน!" : "❌ You need to be in a voice channel first!");
     }
 
     // สร้าง player
@@ -37,7 +38,7 @@ export default class Messages {
     // หาเพลง
     const result = await musicSearch(kazagumo, query, { requester: message.author, userId: message.author.id, nodeName: player.shoukaku.node.name });
     if (!result.tracks.length) {
-      return message.reply(noticeText(result.notice, 'th') || "😢 ไม่เจอเพลงที่หา");
+      return message.reply(noticeText(result.notice, message.guild?.preferredLocale) || (th ? "😢 ไม่เจอเพลงที่หา" : "😢 No song found"));
     }
 
     // เพิ่มเพลงเข้า queue
@@ -50,7 +51,7 @@ export default class Messages {
     // const m = c.isSendable() ? await c.send({ components: [new TextDisplayBuilder().setContent('Loading Message...')], flags: MessageFlags.IsComponentsV2 }) : undefined;
     player.messageId = m?.id;
     // player.showPlaylist = true;
-    const replyText = `เพิ่มเพลง: **${added}** ไปที่ข้อความ ${m.url}`;
+    const replyText = `${th ? "เพิ่มเพลง" : "Added"}: **${added}** ${m.url}`;
 
     await wait(300);
     await sendPStatus(client, kazagumo, player);

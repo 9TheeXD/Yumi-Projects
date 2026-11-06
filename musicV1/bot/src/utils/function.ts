@@ -9,12 +9,14 @@ import { sendPStatus } from "./messages.js";
 import { MessageFlags } from "discord.js";
 import { createCanvas, loadImage, registerFont } from "canvas";
 
-// The server has no Thai font, so Thai titles rendered as boxes. Bundle Noto Sans Thai (OFL) and
+// The server has no Thai or Hindi font, so Thai titles rendered as boxes. Bundle Noto Sans Thai (OFL) and
 // list it after Sans: Pango takes Latin from Sans and falls back to it for Thai glyphs.
 const FONT_DIR = path.join(process.cwd(), "src/utils/fonts");
 try {
   registerFont(path.join(FONT_DIR, "NotoSansThai-Regular.ttf"), { family: "Noto Sans Thai" });
   registerFont(path.join(FONT_DIR, "NotoSansThai-Bold.ttf"), { family: "Noto Sans Thai", weight: "bold" });
+  registerFont(path.join(FONT_DIR, "NotoSansDevanagari-Regular.ttf"), { family: "Noto Sans Devanagari" });
+  registerFont(path.join(FONT_DIR, "NotoSansDevanagari-Bold.ttf"), { family: "Noto Sans Devanagari", weight: "bold" });
 } catch (e) {
   console.error("[MusicCard] Thai font not loaded:", (e as Error).message);
 }
@@ -348,21 +350,21 @@ export async function createMusicCard(data:{
 
   // title
   ctx.fillStyle = "#fff"
-  ctx.font = "bold 28px Sans, Noto Sans Thai"
+  ctx.font = "bold 28px Sans, Noto Sans Thai, Noto Sans Devanagari"
   let y = drawWrapText(ctx,data.track?.title || "unknown",250,55,520,32,2)
 
   // author
   ctx.fillStyle = "#ccc"
-  ctx.font = "20px Sans, Noto Sans Thai"
+  ctx.font = "20px Sans, Noto Sans Thai, Noto Sans Devanagari"
   y = drawWrapText(ctx,data.track?.author || "unknown",250,y + 2,520,24,1)
 
   // duration, then requester, below whatever height the title and author took
   ctx.fillStyle = "#ddd"
-  ctx.font = "18px Sans, Noto Sans Thai"
+  ctx.font = "18px Sans, Noto Sans Thai, Noto Sans Devanagari"
   ctx.fillText(data.duration, 250, y + 8)
 
   ctx.fillStyle = "#fff"
-  ctx.font = "18px Sans, Noto Sans Thai"
+  ctx.font = "18px Sans, Noto Sans Thai, Noto Sans Devanagari"
   drawWrapText(ctx,`Requested by: ${(data.track?.requester as User)?.globalName || (data.track?.requester as User)?.username || "unknown"}`,250,y + 38,520,22,1)
 
   if(data.failed){
@@ -387,7 +389,9 @@ export async function createMusicCard(data:{
     ctx.arc(cx, top + 90, 7, 0, Math.PI * 2)
     ctx.fill()
     ctx.fillStyle = "#fff"
-    ctx.font = "bold 40px Sans, Noto Sans Thai"
+    // shrink long translations so they stay inside the card
+    let size = 40
+    do { ctx.font = `bold ${size}px Sans, Noto Sans Thai, Noto Sans Devanagari` } while(ctx.measureText(data.failed).width > 740 && (size -= 2) > 16)
     ctx.textAlign = "center"
     ctx.fillText(data.failed, cx, 208)
     ctx.textAlign = "start"
