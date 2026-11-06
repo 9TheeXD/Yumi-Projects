@@ -104,6 +104,7 @@ declare module 'discord.js' {
     startTimeouts?: number[];
     // Songs that failed since something last played for 10 s (see MAX_FAILED_SONGS).
     failedSongs?: Set<string>;
+    lastTrack?: KazagumoTrack;
   }
   interface KazagumoEvents {
     debug: [message: string];

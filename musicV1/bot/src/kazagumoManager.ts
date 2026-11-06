@@ -258,6 +258,7 @@ export default class KazagumoManager {
  });kazagumo.on('playerStart', async(p, t)=>{
       console.log(headK, `Player was started: ${chalk.bold(p.guildId)}`);
       p.idleSince = undefined;
+      p.lastTrack = p.queue.current ?? p.lastTrack;
       p.voiceFailSince = undefined;
       p.voiceFails = 0;
       p.failedTrack = undefined;
@@ -271,10 +272,15 @@ export default class KazagumoManager {
       if(!p.queue.current && p.queue.isEmpty && !p.recovering)p.idleSince ??= Date.now();
       savePlayers(kazagumo);
  });kazagumo.on('playerException', async(p, data)=>{
-      const track = p.queue.current;
+      // An error can arrive after the failed song was already cleared from the queue (a second error of
+      // the same attempt, or a start timeout). Dropping it left the player idle until autoDisconnect
+      // removed it (2026-11-06 03:50 UTC, "Die For You": UDP error, then two errors with no song).
+      // When no recovery is in flight, handle it as an error of the last song that was playing.
+      const track = p.queue.current ?? (p.recovering ? undefined : p.lastTrack);
       const error = (data as { exception?: { message?: string } })?.exception?.message || 'unknown';
       console.error(headKE, `Track failed in ${chalk.bold(p.guildId)}: ${track?.title} (${track?.sourceName}):`, error);
       if(!track)return;
+      p.lastTrack = track;
       // Songs failing one after the other mean the node or Discord is at fault, not the songs. Going on
       // would skip the whole queue, so stop at the third song, keep the queue and wait for Resume.
       p.failedSongs ??= new Set();
@@ -304,7 +310,7 @@ export default class KazagumoManager {
       // Discord voice server trouble (voice server crashed: close 4015, node gave up reconnecting,
       // no UDP info, DAVE handshake). The song is fine and every other source would fail the same way.
       // Rejoin the same channel (Discord hands out a new voice server) and play the same song again.
-      const VOICE_ERR = /Voice WS closed|reconnection circuit breaker|missing UDP info|Voice connection timed out|\[DAVE\]/i;
+      const VOICE_ERR = /Voice WS closed|reconnection circuit breaker|(?:missing|without) UDP info|Voice connection timed out|\[DAVE\]/i;
       if(VOICE_ERR.test(error) && !tried('voiceRejoin') && p.voiceId){
         mark('voiceRejoin');
         void notify(client, p.guildId, p.textId, 'voice', NOTICE.voiceTrouble());
