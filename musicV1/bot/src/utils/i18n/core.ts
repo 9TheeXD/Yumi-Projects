@@ -7,6 +7,7 @@ export const KEYS = [
   'playerFailed', 'cardFailed', 'resumeButton', 'resuming', 'nothingToResume', 'resumeNoPlayer',
   'status247On', 'status247Off', 'set247On', 'set247Off',
   'voiceTrouble', 'rejoined', 'left', 'restoreFailed', 'idleLeft',
+  'noticeYoutube', 'noticeRateLimited', 'needVoice', 'noResult',
 ] as const;
 export type Key = typeof KEYS[number];
 export type Strings = Record<Key, string>;

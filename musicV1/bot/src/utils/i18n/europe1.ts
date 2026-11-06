@@ -25,6 +25,10 @@ export const id: Strings = {
   left: 'Bot dikeluarkan dari voice channel, jadi pemutaran berhenti. Gunakan /play untuk memulai lagi.',
   restoreFailed: 'Bot baru saja restart dan tidak bisa masuk lagi ke voice channel. Gunakan /play untuk melanjutkan.',
   idleLeft: 'Tidak ada yang diputar cukup lama, jadi bot keluar dari voice channel. Gunakan /play untuk memulai lagi.',
+  noticeYoutube: 'YouTube sedang tidak tersedia, menggunakan sumber lain.',
+  noticeRateLimited: 'Terlalu banyak pencarian, tunggu sebentar.',
+  needVoice: '❌ Kamu harus berada di voice channel dulu!',
+  noResult: '😢 Lagu tidak ditemukan',
 };
 
 export const da: Strings = {
@@ -52,6 +56,10 @@ export const da: Strings = {
   left: 'Botten blev fjernet fra talekanalen, så afspilningen stoppede. Brug /play for at starte igen.',
   restoreFailed: 'Botten genstartede og kunne ikke komme tilbage i talekanalen. Brug /play for at fortsætte.',
   idleLeft: 'Der har ikke været afspillet noget et stykke tid, så botten forlod talekanalen. Brug /play for at starte igen.',
+  noticeYoutube: 'YouTube er ikke tilgængelig lige nu, bruger andre kilder.',
+  noticeRateLimited: 'For mange søgninger, vent et øjeblik.',
+  needVoice: '❌ Du skal være i en talekanal først!',
+  noResult: '😢 Ingen sang fundet',
 };
 
 export const de: Strings = {
@@ -79,6 +87,10 @@ export const de: Strings = {
   left: 'Der Bot wurde aus dem Sprachkanal entfernt, daher wurde die Wiedergabe gestoppt. Nutze /play, um neu zu starten.',
   restoreFailed: 'Der Bot wurde neu gestartet und konnte dem Sprachkanal nicht wieder beitreten. Nutze /play, um fortzufahren.',
   idleLeft: 'Seit einer Weile lief nichts, daher hat der Bot den Sprachkanal verlassen. Nutze /play, um neu zu starten.',
+  noticeYoutube: 'YouTube ist gerade nicht verfügbar, andere Quellen werden verwendet.',
+  noticeRateLimited: 'Zu viele Suchanfragen, bitte warte einen Moment.',
+  needVoice: '❌ Du musst zuerst in einem Sprachkanal sein!',
+  noResult: '😢 Kein Song gefunden',
 };
 
 export const esES: Strings = {
@@ -106,6 +118,10 @@ export const esES: Strings = {
   left: 'Se sacó al bot del canal de voz, así que la reproducción se detuvo. Usa /play para empezar de nuevo.',
   restoreFailed: 'El bot se reinició y no pudo volver al canal de voz. Usa /play para continuar.',
   idleLeft: 'No se reprodujo nada durante un rato, así que el bot salió del canal de voz. Usa /play para empezar de nuevo.',
+  noticeYoutube: 'YouTube no está disponible ahora mismo, se usan otras fuentes.',
+  noticeRateLimited: 'Demasiadas búsquedas, espera un momento.',
+  needVoice: '❌ ¡Primero tienes que estar en un canal de voz!',
+  noResult: '😢 No se encontró ninguna canción',
 };
 
 export const fr: Strings = {
@@ -133,6 +149,10 @@ export const fr: Strings = {
   left: 'Le bot a été retiré du salon vocal, la lecture s\'est donc arrêtée. Utilise /play pour recommencer.',
   restoreFailed: "Le bot a redémarré et n'a pas pu rejoindre le salon vocal. Utilise /play pour continuer.",
   idleLeft: "Rien n'a été lu depuis un moment, le bot a donc quitté le salon vocal. Utilise /play pour recommencer.",
+  noticeYoutube: 'YouTube est indisponible pour le moment, d\'autres sources sont utilisées.',
+  noticeRateLimited: 'Trop de recherches, patiente un instant.',
+  needVoice: '❌ Tu dois d\'abord être dans un salon vocal !',
+  noResult: '😢 Aucune chanson trouvée',
 };
 
 export const hr: Strings = {
@@ -160,6 +180,10 @@ export const hr: Strings = {
   left: 'Bot je uklonjen iz glasovnog kanala pa je reprodukcija zaustavljena. Koristi /play za ponovno pokretanje.',
   restoreFailed: 'Bot se ponovno pokrenuo i nije se mogao vratiti u glasovni kanal. Koristi /play za nastavak.',
   idleLeft: 'Dulje vrijeme ništa nije svirano pa je bot napustio glasovni kanal. Koristi /play za ponovno pokretanje.',
+  noticeYoutube: 'YouTube trenutno nije dostupan, koriste se drugi izvori.',
+  noticeRateLimited: 'Previše pretraga, pričekaj trenutak.',
+  needVoice: '❌ Prvo moraš biti u glasovnom kanalu!',
+  noResult: '😢 Pjesma nije pronađena',
 };
 
 export const it: Strings = {
@@ -187,6 +211,10 @@ export const it: Strings = {
   left: 'Il bot è stato rimosso dal canale vocale, quindi la riproduzione si è fermata. Usa /play per ricominciare.',
   restoreFailed: 'Il bot si è riavviato e non è riuscito a rientrare nel canale vocale. Usa /play per continuare.',
   idleLeft: 'Per un po\' non è stato riprodotto nulla, quindi il bot ha lasciato il canale vocale. Usa /play per ricominciare.',
+  noticeYoutube: 'YouTube non è disponibile al momento, uso altre fonti.',
+  noticeRateLimited: 'Troppe ricerche, attendi un momento.',
+  needVoice: '❌ Devi prima essere in un canale vocale!',
+  noResult: '😢 Nessuna canzone trovata',
 };
 
 export const lt: Strings = {
@@ -214,6 +242,10 @@ export const lt: Strings = {
   left: 'Botas buvo pašalintas iš balso kanalo, todėl grojimas sustojo. Naudok /play, kad pradėtum iš naujo.',
   restoreFailed: 'Botas persikrovė ir negalėjo grįžti į balso kanalą. Naudok /play, kad tęstum.',
   idleLeft: 'Kurį laiką nieko negrota, todėl botas išėjo iš balso kanalo. Naudok /play, kad pradėtum iš naujo.',
+  noticeYoutube: '„YouTube“ šiuo metu nepasiekiamas, naudojami kiti šaltiniai.',
+  noticeRateLimited: 'Per daug paieškų, palauk akimirką.',
+  needVoice: '❌ Pirmiausia turi būti balso kanale!',
+  noResult: '😢 Dainos nerasta',
 };
 
 export const hu: Strings = {
@@ -241,6 +273,10 @@ export const hu: Strings = {
   left: 'A botot eltávolították a hangcsatornából, ezért a lejátszás leállt. A /play paranccsal indíthatod újra.',
   restoreFailed: 'A bot újraindult, és nem tudott visszacsatlakozni a hangcsatornához. A /play paranccsal folytathatod.',
   idleLeft: 'Egy ideje semmi sem szólt, ezért a bot elhagyta a hangcsatornát. A /play paranccsal indíthatod újra.',
+  noticeYoutube: 'A YouTube jelenleg nem érhető el, más forrásokat használok.',
+  noticeRateLimited: 'Túl sok keresés, várj egy pillanatot.',
+  needVoice: '❌ Előbb hangcsatornában kell lenned!',
+  noResult: '😢 Nem találtam számot',
 };
 
 export const nl: Strings = {
@@ -268,4 +304,8 @@ export const nl: Strings = {
   left: 'De bot is uit het spraakkanaal verwijderd, dus het afspelen is gestopt. Gebruik /play om opnieuw te starten.',
   restoreFailed: 'De bot is herstart en kon niet terugkeren naar het spraakkanaal. Gebruik /play om verder te gaan.',
   idleLeft: 'Er is een tijdje niets afgespeeld, dus de bot heeft het spraakkanaal verlaten. Gebruik /play om opnieuw te starten.',
+  noticeYoutube: 'YouTube is momenteel niet beschikbaar, andere bronnen worden gebruikt.',
+  noticeRateLimited: 'Te veel zoekopdrachten, wacht even.',
+  needVoice: '❌ Je moet eerst in een spraakkanaal zitten!',
+  noResult: '😢 Geen nummer gevonden',
 };

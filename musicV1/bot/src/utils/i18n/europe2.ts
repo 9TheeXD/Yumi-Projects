@@ -25,6 +25,10 @@ export const no: Strings = {
   left: 'Boten ble fjernet fra talekanalen, så avspillingen stoppet. Bruk /play for å starte på nytt.',
   restoreFailed: 'Boten startet på nytt og kom ikke tilbake i talekanalen. Bruk /play for å fortsette.',
   idleLeft: 'Ingenting har blitt spilt på en stund, så boten forlot talekanalen. Bruk /play for å starte på nytt.',
+  noticeYoutube: 'YouTube er ikke tilgjengelig akkurat nå, bruker andre kilder.',
+  noticeRateLimited: 'For mange søk, vent et øyeblikk.',
+  needVoice: '❌ Du må være i en talekanal først!',
+  noResult: '😢 Fant ingen sang',
 };
 
 export const pl: Strings = {
@@ -52,6 +56,10 @@ export const pl: Strings = {
   left: 'Bot został usunięty z kanału głosowego, więc odtwarzanie się zatrzymało. Użyj /play, aby zacząć od nowa.',
   restoreFailed: 'Bot się zrestartował i nie mógł wrócić na kanał głosowy. Użyj /play, aby kontynuować.',
   idleLeft: 'Od jakiegoś czasu nic nie grało, więc bot opuścił kanał głosowy. Użyj /play, aby zacząć od nowa.',
+  noticeYoutube: 'YouTube jest teraz niedostępny, używam innych źródeł.',
+  noticeRateLimited: 'Zbyt wiele wyszukiwań, poczekaj chwilę.',
+  needVoice: '❌ Najpierw musisz być na kanale głosowym!',
+  noResult: '😢 Nie znaleziono utworu',
 };
 
 export const ptBR: Strings = {
@@ -79,6 +87,10 @@ export const ptBR: Strings = {
   left: 'O bot foi removido do canal de voz, então a reprodução parou. Use /play para começar de novo.',
   restoreFailed: 'O bot reiniciou e não conseguiu voltar ao canal de voz. Use /play para continuar.',
   idleLeft: 'Nada tocou por um tempo, então o bot saiu do canal de voz. Use /play para começar de novo.',
+  noticeYoutube: 'O YouTube está indisponível no momento, usando outras fontes.',
+  noticeRateLimited: 'Muitas buscas, aguarde um momento.',
+  needVoice: '❌ Você precisa estar em um canal de voz primeiro!',
+  noResult: '😢 Nenhuma música encontrada',
 };
 
 export const ro: Strings = {
@@ -106,6 +118,10 @@ export const ro: Strings = {
   left: 'Botul a fost scos de pe canalul vocal, deci redarea s-a oprit. Folosește /play pentru a începe din nou.',
   restoreFailed: 'Botul a repornit și nu a putut reveni pe canalul vocal. Folosește /play pentru a continua.',
   idleLeft: 'Nu s-a redat nimic o vreme, așa că botul a părăsit canalul vocal. Folosește /play pentru a începe din nou.',
+  noticeYoutube: 'YouTube nu este disponibil acum, se folosesc alte surse.',
+  noticeRateLimited: 'Prea multe căutări, așteaptă un moment.',
+  needVoice: '❌ Trebuie să fii mai întâi pe un canal vocal!',
+  noResult: '😢 Nu s-a găsit nicio melodie',
 };
 
 export const fi: Strings = {
@@ -133,6 +149,10 @@ export const fi: Strings = {
   left: 'Botti poistettiin puhekanavalta, joten toisto pysähtyi. Aloita uudelleen komennolla /play.',
   restoreFailed: 'Botti käynnistyi uudelleen eikä päässyt takaisin puhekanavalle. Jatka komennolla /play.',
   idleLeft: 'Mitään ei ole toistettu hetkeen, joten botti poistui puhekanavalta. Aloita uudelleen komennolla /play.',
+  noticeYoutube: 'YouTube ei ole juuri nyt käytettävissä, käytetään muita lähteitä.',
+  noticeRateLimited: 'Liikaa hakuja, odota hetki.',
+  needVoice: '❌ Sinun on ensin oltava puhekanavalla!',
+  noResult: '😢 Kappaletta ei löytynyt',
 };
 
 export const svSE: Strings = {
@@ -160,6 +180,10 @@ export const svSE: Strings = {
   left: 'Boten togs bort från röstkanalen, så uppspelningen stoppades. Använd /play för att börja om.',
   restoreFailed: 'Boten startade om och kunde inte gå med i röstkanalen igen. Använd /play för att fortsätta.',
   idleLeft: 'Inget har spelats på ett tag, så boten lämnade röstkanalen. Använd /play för att börja om.',
+  noticeYoutube: 'YouTube är inte tillgängligt just nu, använder andra källor.',
+  noticeRateLimited: 'För många sökningar, vänta ett ögonblick.',
+  needVoice: '❌ Du måste vara i en röstkanal först!',
+  noResult: '😢 Hittade ingen låt',
 };
 
 export const vi: Strings = {
@@ -187,6 +211,10 @@ export const vi: Strings = {
   left: 'Bot đã bị đưa ra khỏi kênh thoại nên việc phát đã dừng. Dùng /play để bắt đầu lại.',
   restoreFailed: 'Bot vừa khởi động lại và không thể vào lại kênh thoại. Dùng /play để tiếp tục.',
   idleLeft: 'Không có gì được phát một lúc nên bot đã rời kênh thoại. Dùng /play để bắt đầu lại.',
+  noticeYoutube: 'YouTube hiện không khả dụng, đang dùng nguồn khác.',
+  noticeRateLimited: 'Tìm kiếm quá nhiều, vui lòng đợi một chút.',
+  needVoice: '❌ Bạn cần vào kênh thoại trước!',
+  noResult: '😢 Không tìm thấy bài hát',
 };
 
 export const tr: Strings = {
@@ -214,6 +242,10 @@ export const tr: Strings = {
   left: 'Bot ses kanalından çıkarıldı, bu yüzden oynatma durdu. Yeniden başlatmak için /play kullan.',
   restoreFailed: 'Bot yeniden başladı ve ses kanalına geri katılamadı. Devam etmek için /play kullan.',
   idleLeft: 'Bir süredir hiçbir şey çalmadı, bu yüzden bot ses kanalından ayrıldı. Yeniden başlatmak için /play kullan.',
+  noticeYoutube: 'YouTube şu an kullanılamıyor, başka kaynaklar kullanılıyor.',
+  noticeRateLimited: 'Çok fazla arama yapıldı, lütfen biraz bekle.',
+  needVoice: '❌ Önce bir ses kanalında olmalısın!',
+  noResult: '😢 Şarkı bulunamadı',
 };
 
 export const cs: Strings = {
@@ -241,6 +273,10 @@ export const cs: Strings = {
   left: 'Bot byl odebrán z hlasového kanálu, takže se přehrávání zastavilo. Pomocí /play začni znovu.',
   restoreFailed: 'Bot se restartoval a nemohl se vrátit do hlasového kanálu. Pomocí /play pokračuj.',
   idleLeft: 'Delší dobu nic nehrálo, proto bot opustil hlasový kanál. Pomocí /play začni znovu.',
+  noticeYoutube: 'YouTube je momentálně nedostupný, používám jiné zdroje.',
+  noticeRateLimited: 'Příliš mnoho vyhledávání, chvíli počkej.',
+  needVoice: '❌ Nejdřív musíš být v hlasovém kanálu!',
+  noResult: '😢 Skladba nenalezena',
 };
 
 export const el: Strings = {
@@ -268,4 +304,8 @@ export const el: Strings = {
   left: 'Το bot αφαιρέθηκε από το κανάλι φωνής, οπότε η αναπαραγωγή σταμάτησε. Χρησιμοποίησε /play για να ξεκινήσεις ξανά.',
   restoreFailed: 'Το bot επανεκκινήθηκε και δεν μπόρεσε να επιστρέψει στο κανάλι φωνής. Χρησιμοποίησε /play για να συνεχίσεις.',
   idleLeft: 'Δεν έπαιζε τίποτα για λίγο, οπότε το bot έφυγε από το κανάλι φωνής. Χρησιμοποίησε /play για να ξεκινήσεις ξανά.',
+  noticeYoutube: 'Το YouTube δεν είναι διαθέσιμο αυτή τη στιγμή, χρησιμοποιούνται άλλες πηγές.',
+  noticeRateLimited: 'Πάρα πολλές αναζητήσεις, περίμενε λίγο.',
+  needVoice: '❌ Πρέπει πρώτα να βρίσκεσαι σε κανάλι φωνής!',
+  noResult: '😢 Δεν βρέθηκε τραγούδι',
 };

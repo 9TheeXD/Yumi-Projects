@@ -6,6 +6,7 @@ import { cacheDropUri, cacheGet, cachePut, cacheSearchTitles, negativeHas, negat
 import { musicConfig, SOURCES, sourceEnabled, type SourceDef } from "./config.js";
 import { Semaphore, userAllow } from "./limiter.js";
 import Env from "../utils/env.js";
+import { tx } from "../utils/i18n/index.js";
 
 const head = chalk.cyan.bold('[Resolver]');
 const youtubeGate = new Semaphore(() => musicConfig().youtubeConcurrency);
@@ -389,12 +390,7 @@ export function recordPlayback(sourceName: string | undefined, error?: string) {
   if (!TRACK_SPECIFIC.test(error)) breakerFailure(key, error);
 }
 
-const NOTICE_TEXT: Record<MusicNotice, { th: string; en: string }> = {
-  youtube_unavailable: { th: 'YouTube ใช้ไม่ได้ตอนนี้ ใช้แหล่งอื่นแทน', en: 'YouTube is unavailable right now, using other sources.' },
-  rate_limited: { th: 'ค้นหาถี่เกินไป รอสักครู่แล้วลองใหม่', en: 'Too many searches, please wait a moment.' },
-};
-
-export function noticeText(notice: MusicNotice | undefined, locale?: string) {
+export function noticeText(notice: MusicNotice | undefined, locale?: string | null) {
   if (!notice) return '';
-  return locale === 'th' ? NOTICE_TEXT[notice].th : NOTICE_TEXT[notice].en;
+  return tx(notice === 'youtube_unavailable' ? 'noticeYoutube' : 'noticeRateLimited', locale);
 }

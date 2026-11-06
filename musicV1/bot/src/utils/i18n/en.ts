@@ -25,4 +25,8 @@ export const en: Strings = {
   left: 'The bot was removed from the voice channel, so playback stopped. Use /play to start again.',
   restoreFailed: "The bot restarted and couldn't rejoin the voice channel. Use /play to continue.",
   idleLeft: 'Nothing has played for a while, so the bot left the voice channel. Use /play to start again.',
+  noticeYoutube: 'YouTube is unavailable right now, using other sources.',
+  noticeRateLimited: 'Too many searches, please wait a moment.',
+  needVoice: '❌ You need to be in a voice channel first!',
+  noResult: '😢 No song found',
 };
