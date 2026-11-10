@@ -10,9 +10,9 @@
 
 - เว็บไซต์: [yumistack.net](https://yumistack.net/)
 - Discord: [discord.gg/brxPZB3Jzy](https://discord.gg/brxPZB3Jzy)
-- งานที่กำลังทำ: [GitHub Projects](https://github.com/users/Campus2454/projects/4)
-- [โครงสร้างโปรเจค ↘](https://github.com/Campus2454/Yumi-Projects/tree/main#project-structure)
-- [สมาชิกทีม Yumi ↘](https://github.com/Campus2454/Yumi-Projects/tree/main#team-yumi)
+- งานที่กำลังทำ: [GitHub Projects](https://github.com/users/9TheeXD/projects/4)
+- [โครงสร้างโปรเจค ↘](https://github.com/9TheeXD/Yumi-Projects/tree/main#project-structure)
+- [สมาชิกทีม Yumi ↘](https://github.com/9TheeXD/Yumi-Projects/tree/main#team-yumi)
 
 ## Project Structure
 
@@ -32,18 +32,18 @@
 
 ## Team Yumi
 
-1) **Campus2454 (แคมปัส - ธีร์)**
+1) **[9TheeXD](https://github.com/9TheeXD) (แคมปัส - ธีร์)**
    - เจ้าของโปรเจค
    - พัฒนาบอทหลัก `(ทำทั้งหมด)`
    - พัฒนาเว็บไซต์ `(~80%)`
    - พัฒนาบอทเพลง `(~80%)`
-2) **kxnomtom (คุณน๋ม - ขนมต้ม - บีม)**
+2) **[cnkkt](https://github.com/cnkkt) (คุณน๋ม - ขนมต้ม - บีม)**
    - ทีมช่วยเหลือเรื่องต่างๆ
    - พัฒนาเว็บไซต์ `(~20%)`
 3) **alpha._.ice (อัลฟา)**
    - ทีมช่วยเหลือเรื่องต่างๆ
    - แอดมินและดูแลความปลอดภัยของเซิร์ฟเวอร์ Discord
-4) **Claude Code**
+4) **[Claude Code](https://github.com/Claude)**
    - เป็นที่ปรึกษาด้านการ Coding
    - พัฒนาระบบ Status `(ทำทั้งหมด)`
    - ปรับปรุงและดัดแปลง lavalink/nodelink `(ทำทั้งหมด)`
