@@ -4,6 +4,7 @@ import { Constants, LavalinkResponse, LoadType, Node, Track } from "shoukaku";
 import { breakerAllow, breakerFailure, breakerSuccess } from "./breaker.js";
 import { cacheDropUri, cacheGet, cachePut, cacheSearchTitles, negativeHas, negativePut, normalizeQuery } from "./cache.js";
 import { musicConfig, SOURCES, sourceEnabled, type SourceDef } from "./config.js";
+import { extract, isExtractUrl } from "./extract.js";
 import { Semaphore, userAllow } from "./limiter.js";
 import Env from "../utils/env.js";
 import { tx } from "../utils/i18n/index.js";
@@ -328,6 +329,23 @@ export async function musicSearch(kazagumo: Kazagumo, query: string, opts: Music
 
   if (/^https?:\/\//i.test(queryNorm)) {
     const key = urlSourceKey(queryNorm);
+    // A site the nodes cannot load: yt-dlp finds the media file and the node plays it as a plain file.
+    // The track keeps the page link as its uri, so a restore or a replay looks the file up again
+    // (the media link expires).
+    if (isExtractUrl(queryNorm)) {
+      if (!breakerAllow(key)) return empty();
+      const ex = await extract(queryNorm);
+      const r = ex ? await load(node, ex.direct, 'http') : null;
+      const t = r?.ok ? tracksOf(r.res).tracks[0] : undefined;
+      if (!ex || !t) {
+        breakerFailure(key, ex ? 'node could not load the file' : 'yt-dlp failed');
+        console.warn(head, `URL load failed (${key}):`, ex ? (r && !r.ok ? r.error : 'no track') : 'yt-dlp failed');
+        return empty();
+      }
+      breakerSuccess(key);
+      t.info = { ...t.info, title: ex.title, author: ex.author, length: ex.durationMs || t.info.length, artworkUrl: ex.artwork ?? t.info.artworkUrl, uri: queryNorm, isStream: false };
+      return { type: 'TRACK', tracks: wrap(kazagumo, [t], opts.requester) };
+    }
     if (!exclude.includes(key) && breakerAllow(key) && !(key === 'youtube' && !sourceEnabled('youtube'))) {
       const r = await load(node, queryNorm, key);
       // A failed YouTube URL load is reported only after the search-by-id fallback below also fails.
