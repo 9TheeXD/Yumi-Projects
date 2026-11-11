@@ -1,6 +1,6 @@
 {
   "name": "bot",
-  "version": "0.6.11",
+  "version": "0.6.12-beta",
   "main": "index.js",
   "license": "MIT",
   "dependencies": {

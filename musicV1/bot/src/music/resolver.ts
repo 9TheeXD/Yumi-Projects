@@ -241,6 +241,8 @@ const autocompleteMemo = new Map<string, { at: number; tracks: Track[] }>();
 
 async function autocomplete(kazagumo: Kazagumo, node: Node, query: string, opts: MusicSearchOptions): Promise<MusicSearchResult> {
   // A link is loaded, not searched: "ytmsearch:https://youtu.be/..." returns unrelated songs.
+  // A link yt-dlp has to resolve is not looked up on every keystroke: it starts a Python process.
+  if (isExtractUrl(query.trim())) return empty();
   if (/^https?:\/\//i.test(query.trim())) return musicSearch(kazagumo, query, { ...opts, kind: 'play' });
   const queryNorm = normalizeQuery(query);
   if (queryNorm.length < 2) return empty();

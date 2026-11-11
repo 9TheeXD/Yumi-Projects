@@ -32,7 +32,8 @@ export function extract(url: string): Promise<Extracted | null> {
           const j = JSON.parse(stdout) as { title?: string; uploader?: string; channel?: string; duration?: number; thumbnail?: string; url?: string };
           if (!j.url || !/^https?:\/\//i.test(j.url)) return resolve(null);
           resolve({
-            title: (j.title || 'Facebook video').slice(0, 200),
+            // yt-dlp names an untitled post after its link: show a plain name instead.
+            title: (j.title && !/^https?:\/\//i.test(j.title) ? j.title : 'Facebook video').slice(0, 200),
             author: j.uploader || j.channel || 'Facebook',
             durationMs: Math.round((j.duration ?? 0) * 1000),
             artwork: j.thumbnail,
