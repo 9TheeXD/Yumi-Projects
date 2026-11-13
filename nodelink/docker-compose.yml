@@ -101,7 +101,7 @@ services:
     image: ghcr.io/kikkia/yt-cipher@${YT_CIPHER_DIGEST:-sha256:4c5ec381ff57336cfc24822d2b526a5ad7cd0171f61065a1bbc87bb736842449}
     container_name: yumi_nodelink_cipher
     restart: unless-stopped
-    mem_limit: ${YT_CIPHER_MEM_LIMIT:-512m}
+    mem_limit: ${YT_CIPHER_MEM_LIMIT:-768m}
     environment:
       - OVERRIDE_PLAYER_VARIANT=IAS
     # Bound to loopback only, so no API_TOKEN needed. NodeLink reaches it by service name
